@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MaqCheck – Ficha do ativo</title>
+<meta name="robots" content="noindex">
+<style>
+  :root { --navy:#1f3864; --ink:#1b1f24; --bg:#f2f4f7; --ok:#2e7d32; --amb:#9c6500; --red:#c00000; --acc:#c55a11; }
+  * { box-sizing:border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; margin:0; background:var(--bg); color:var(--ink); }
+  .top { background:var(--navy); color:#fff; padding:14px 18px; display:flex; justify-content:space-between; align-items:center; }
+  .top b { font-size:20px; letter-spacing:.5px } .top span { font-size:13px; opacity:.85 }
+  .card { background:#fff; margin:16px; border-radius:10px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  .cod { font-size:34px; font-weight:bold; margin:0 } .desc { font-size:17px; margin:4px 0 12px }
+  .nr { display:inline-block; background:var(--ink); color:#fff; border-radius:6px; padding:3px 9px; font-weight:bold; font-size:14px }
+  .row { margin-top:10px; font-size:14px; color:#444 }
+  .btn { display:block; text-align:center; text-decoration:none; font-weight:bold; font-size:18px; border-radius:8px; padding:15px; margin:12px 16px; color:#fff; background:var(--acc) }
+  .btn.sec { background:var(--ok) }
+  .off { display:block; text-align:center; color:#777; border:1px dashed #aaa; border-radius:8px; padding:13px; margin:12px 16px }
+  .blq { background:var(--red); color:#fff; font-weight:bold; text-align:center; padding:14px; margin:16px; border-radius:10px; font-size:18px }
+  .blq small { display:block; font-weight:normal; font-size:13px; margin-top:6px }
+  .lib { color:var(--ok); font-weight:bold } .pend { color:var(--amb); font-weight:bold } .bad { color:var(--red); font-weight:bold }
+  .foot { font-size:11px; color:#888; text-align:center; margin:18px }
+  .load { text-align:center; color:#666; margin:40px 16px }
+</style>
+</head>
+<body>
+<div class="top"><b>MC23</b><span>MaqCheck SST</span></div>
+<div id="app"><p class="load">Carregando a ficha do ativo…</p></div>
+<div class="foot">MC23 Engenharia · <a href="https://www.mc23.com.br" style="color:#888">www.mc23.com.br</a></div>
+
+<script>
+/* Fonte dos dados: abas "Ativos" e "Status QR" do Painel MaqCheck, publicadas na Web como CSV.
+   Para trocar a fonte, edite só estas duas linhas. */
+const CSV_ATIVOS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT50D-kZo9oGv1OiTLn5ALf5O3d0z5spQrNeNSUF3ckG8huUwDMHSEbxAuEXZBazL3ea51RH69iPzTN/pub?gid=2098913993&single=true&output=csv';
+const CSV_STATUS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT50D-kZo9oGv1OiTLn5ALf5O3d0z5spQrNeNSUF3ckG8huUwDMHSEbxAuEXZBazL3ea51RH69iPzTN/pub?gid=1912443581&single=true&output=csv';
+
+const q = new URLSearchParams(location.search);
+const CLI = (q.get('c') || '').trim().toUpperCase();
+const COD = (q.get('a') || '').trim().toUpperCase();
+const app = document.getElementById('app');
+
+function csv(text) {                       // CSV simples com aspas
+  const rows = []; let row = [], cell = '', inq = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inq) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') inq = false; else cell += ch;
+    } else if (ch === '"') inq = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (ch !== '\r') cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+const esc = s => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const codDe = s => String(s || '').split(' – ')[0].trim().toUpperCase();
+const ehLink = s => /^https:\/\/(docs\.google\.com|forms\.gle)\//.test(String(s || ''));
+
+async function pega(url) {
+  const r = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return csv(await r.text());
+}
+
+async function main() {
+  if (!COD) { app.innerHTML = '<div class="card"><p class="desc">QR sem código de ativo.</p></div>'; return; }
+  let ativos, status = [];
+  try { ativos = await pega(CSV_ATIVOS); } catch (e) {
+    app.innerHTML = '<div class="card"><p class="cod">' + esc(COD) + '</p><p class="desc">Não foi possível carregar a ficha agora. Verifique a internet e tente de novo.</p></div>';
+    return;
+  }
+  try { status = await pega(CSV_STATUS); } catch (e) { /* ficha abre mesmo sem status */ }
+  const h = ativos[0] || [];
+  const ix = n => h.indexOf(n);
+  const row = ativos.slice(1).find(r => String(r[ix('Código')] || '').trim().toUpperCase() === COD &&
+                                        (!CLI || String(r[ix('Cliente')] || '').trim().toUpperCase() === CLI));
+  if (!row) {
+    app.innerHTML = '<div class="card"><p class="cod">' + esc(COD) + '</p><p class="desc">Ativo não cadastrado' + (CLI ? ' para ' + esc(CLI) : '') +
+      '.</p><p class="row">Avise o técnico de segurança ou a MC23 Engenharia.</p></div>';
+    return;
+  }
+  const g = n => row[ix(n)] || '';
+  // último checklist (Status QR: Cliente, Ativo, Data/hora, Resultado, Itens não conformes)
+  let ult = null;
+  for (let i = status.length - 1; i >= 1; i--) {
+    const s = status[i];
+    if (codDe(s[1]) === COD && (!CLI || String(s[0]).toUpperCase() === CLI)) { ult = { data: s[2], res: s[3], nc: s[4] }; break; }
+  }
+  const pt = ehLink(g('Link PT')) ? g('Link PT') : '';
+  const chk = ehLink(g('Link checklist (gerado)')) ? g('Link checklist (gerado)') : '';
+  let html = '<div class="card"><p class="cod">' + esc(g('Código')) + '</p><p class="desc">' + esc(g('Descrição')) + '</p>' +
+    '<span class="nr">' + esc(g('NR')) + '</span>' +
+    '<div class="row"><b>Tipo:</b> ' + esc(g('Tipo')) + '</div>' +
+    '<div class="row"><b>Local:</b> ' + esc(g('Local')) + '</div>' +
+    '<div class="row"><b>Cliente:</b> ' + esc(g('Cliente')) + '</div>' +
+    (g('Observação') ? '<div class="row">' + esc(g('Observação')) + '</div>' : '');
+  if (ult) {
+    const cls = ult.res.indexOf('BLOQ') === 0 ? 'bad' : (ult.res.indexOf('PEND') > 0 ? 'pend' : 'lib');
+    html += '<div class="row"><b>Último checklist:</b> ' + esc(ult.data) + ' – <span class="' + cls + '">' + esc(ult.res) + '</span></div>';
+  }
+  html += '</div>';
+  if (ult && ult.res.indexOf('BLOQ') === 0)
+    html += '<div class="blq">EQUIPAMENTO BLOQUEADO – NÃO USAR<small>' + esc(ult.nc) + '</small></div>';
+  if (pt) html += '<a class="btn" href="' + esc(pt) + '">EMITIR PERMISSÃO DE TRABALHO (NR-10)</a>';
+  if (chk) html += '<a class="btn sec" href="' + esc(chk) + '">CHECKLIST DE INSPEÇÃO</a>';
+  if (!pt && !chk) html += '<span class="off">Checklist online – em implantação</span>';
+  app.innerHTML = html;
+  document.title = g('Código') + ' – MaqCheck';
+}
+main();
+</script>
+</body>
+</html>
