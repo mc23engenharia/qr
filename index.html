@@ -19,7 +19,8 @@
   .btn.sec { background:var(--ok) }
   .off { display:block; text-align:center; color:#777; border:1px dashed #aaa; border-radius:8px; padding:13px; margin:12px 16px }
   .blq { background:var(--red); color:#fff; font-weight:bold; text-align:center; padding:14px; margin:16px; border-radius:10px; font-size:18px }
-  .blq small { display:block; font-weight:normal; font-size:13px; margin-top:6px }
+  .blq small, .atn small { display:block; font-weight:normal; font-size:13px; margin-top:6px }
+  .atn { background:#fff4ce; color:#7a4f00; border:2px solid #e0a800; font-weight:bold; text-align:center; padding:14px; margin:16px; border-radius:10px; font-size:17px }
   .lib { color:var(--ok); font-weight:bold } .pend { color:var(--amb); font-weight:bold } .bad { color:var(--red); font-weight:bold }
   .foot { font-size:11px; color:#888; text-align:center; margin:18px }
   .load { text-align:center; color:#666; margin:40px 16px }
@@ -98,13 +99,16 @@ async function main() {
     '<div class="row"><b>Local:</b> ' + esc(g('Local')) + '</div>' +
     '<div class="row"><b>Cliente:</b> ' + esc(g('Cliente')) + '</div>' +
     (g('Observação') ? '<div class="row">' + esc(g('Observação')) + '</div>' : '');
+  // situação (aba Status QR): OK / ATENÇÃO / AGUARDANDO = amarelo; PARADO / EM MANUTENÇÃO = vermelho
+  const sit = ult ? String(ult.res).toUpperCase() : '';
+  const verm = /^(PARADO|EM MANUTEN|BLOQ)/.test(sit), amar = /^(ATEN|AGUARD)/.test(sit);
   if (ult) {
-    const cls = ult.res.indexOf('BLOQ') === 0 ? 'bad' : (ult.res.indexOf('PEND') > 0 ? 'pend' : 'lib');
+    const cls = verm ? 'bad' : (amar ? 'pend' : 'lib');
     html += '<div class="row"><b>Último checklist:</b> ' + esc(ult.data) + ' – <span class="' + cls + '">' + esc(ult.res) + '</span></div>';
   }
   html += '</div>';
-  if (ult && ult.res.indexOf('BLOQ') === 0)
-    html += '<div class="blq">EQUIPAMENTO BLOQUEADO – NÃO USAR<small>' + esc(ult.nc) + '</small></div>';
+  if (verm) html += '<div class="blq">' + esc(ult.res) + (ult.nc ? '<small>' + esc(ult.nc) + '</small>' : '') + '</div>';
+  else if (amar) html += '<div class="atn">' + esc(ult.res) + (ult.nc ? '<small>' + esc(ult.nc) + '</small>' : '') + '<small>O responsável da área foi avisado e vai avaliar.</small></div>';
   if (pt) html += '<a class="btn" href="' + esc(pt) + '">EMITIR PERMISSÃO DE TRABALHO (NR-10)</a>';
   if (chk) html += '<a class="btn sec" href="' + esc(chk) + '">CHECKLIST DE INSPEÇÃO</a>';
   if (!pt && !chk) html += '<span class="off">Checklist online – em implantação</span>';
