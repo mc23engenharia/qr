@@ -407,7 +407,7 @@ function cartaoHoje(r) {
   const lnk = x => '<a href="/?c=' + encodeURIComponent(CLI || sessao().cli) + '&a=' + encodeURIComponent(x.cod) + '"><span><b>' + esc(x.cod) + '</b> ' + esc(x.desc) + (x.feito ? '<br><small style="color:#667">' + esc(x.hora) + ' · ' + esc(x.quem) + ' · <span class="' + (/^OK/.test(x.res) ? 'lib' : /^(PARADO|BLOQ|EM MANUT)/.test(x.res) ? 'bad' : 'pend') + '">' + esc(x.res) + '</span></small>' : x.local ? '<br><small style="color:#667">' + esc(x.local) + '</small>' : '') + '</span><span>›</span></a>';
   return '<div class="card"><h2 style="margin:0 0 10px">Hoje · ' + esc(r.hoje) + '</h2><div style="display:flex;gap:6px">' +
     num(r.feitos + '/' + r.checklists.length, 'checklists', r.feitos === r.checklists.length ? 'var(--ok)' : 'var(--amb)') + num(r.avisos, 'avisos abertos', r.avisos ? 'var(--red)' : 'var(--ok)') +
-    num(resAl.length, 'resíduos no prazo', resAl.length ? 'var(--red)' : 'var(--ok)') + '</div>' +
+    num(resAl.length, 'resíduos vencendo', resAl.length ? 'var(--red)' : 'var(--ok)') + '</div>' +
     '<div class="prog" style="margin-top:12px"><i style="width:' + (r.checklists.length ? Math.round(100 * r.feitos / r.checklists.length) : 0) + '%"></i></div>' +
     '<p class="row" style="font-size:12px;margin:4px 0 0">Equipamentos com checklist diário em uso' + (r.foraDeUso ? ' (' + r.foraDeUso + ' no pátio ou em manutenção não entram)' : '') + '.</p>' +
     (pend.length ? '<details class="mais" style="margin:10px 0 0"><summary>Sem checklist hoje (' + pend.length + ')</summary><div class="rec">' + pend.map(lnk).join('') + '</div></details>' : '') +
