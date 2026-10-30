@@ -121,7 +121,7 @@ async function enviaFila() {
   const f = fila(); if (!f.length || !navigator.onLine) return;
   const resto = [];
   for (const item of f) {
-    try { const r = await api(item); if (!r.ok && !r.sair) resto.push(item); } catch (e) { resto.push(item); }
+    try { let r = await api(item); if (r.horBaixo) { item.confirmaHor = true; r = await api(item); } if (!r.ok && !r.sair) resto.push(item); } catch (e) { resto.push(item); }
   }
   ls.set('mq_fila', resto);
   const b = document.getElementById('fila'); if (b) b.outerHTML = bannerFila();
@@ -290,10 +290,11 @@ async function checklist() {
     const nc = resp.filter(x => x === 'Não conforme').length, obs = document.getElementById('obs').value.trim();
     if (nc && !obs && !fotos.length) { er.textContent = 'Descreva a não conformidade ou tire uma foto.'; return; }
     const dados = { acao: 'checklist', token: s.token, cli: CLI, cod: COD, id: Date.now() + '-' + Math.random().toString(36).slice(2, 8), respostas: resp, pode,
-                    horimetro: (document.getElementById('hor') || {}).value || '', obs, fotos: fotos.map(b64 => ({ b64, tipo: 'image/jpeg' })) };
+                    horimetro: (document.getElementById('hor') || {}).value || '', confirmaHor: !!document.getElementById('env').dataset.conf, obs, fotos: fotos.map(b64 => ({ b64, tipo: 'image/jpeg' })) };
     const bt = document.getElementById('env'); bt.disabled = true; bt.textContent = 'ENVIANDO…';
     try {
       const r = await api(dados);
+      if (r.horBaixo) { bt.dataset.conf = '1'; er.textContent = r.erro; bt.disabled = false; bt.textContent = 'ENVIAR MESMO ASSIM'; return; }
       if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); } er.textContent = r.erro || 'Não foi possível enviar.'; bt.disabled = false; bt.textContent = 'ENVIAR CHECKLIST'; return; }
       fim(true, r.msg || 'Checklist enviado.', nc, pode);
     } catch (e) { const f = fila(); f.push(dados); ls.set('mq_fila', f); fim(false, 'Sem sinal: o checklist ficou guardado no celular e será enviado sozinho quando houver internet.', nc, pode); }
@@ -361,10 +362,11 @@ async function etapa(tipo) {
     const er = document.getElementById('eerr');
     const falta = def.itens.find(it => it.obrig && (Array.isArray(v[it.id]) ? (it.tipo === 'grade' ? v[it.id].some(x => !x) : !v[it.id].length) : !v[it.id]));
     if (falta) { er.textContent = 'Falta responder: ' + falta.titulo; return; }
-    const s2 = sessao(), dados = { acao: 'enviarForm', tipo, token: s2 && s2.cli === CLI ? s2.token : '', cli: CLI, cod: COD, id: Date.now() + '-' + Math.random().toString(36).slice(2, 8), respostas: v, fotos: fotos.map(b64 => ({ b64 })) };
+    const s2 = sessao(), dados = { acao: 'enviarForm', tipo, token: s2 && s2.cli === CLI ? s2.token : '', cli: CLI, cod: COD, id: Date.now() + '-' + Math.random().toString(36).slice(2, 8), respostas: v, confirmaHor: !!document.getElementById('env').dataset.conf, fotos: fotos.map(b64 => ({ b64 })) };
     const bt = document.getElementById('env'); bt.disabled = true; bt.textContent = 'ENVIANDO…';
     try {
       const r = await api(dados);
+      if (r.horBaixo) { bt.dataset.conf = '1'; er.textContent = r.erro; bt.disabled = false; bt.textContent = 'ENVIAR MESMO ASSIM'; return; }
       if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); } er.textContent = r.erro || 'Não foi possível enviar.'; bt.disabled = false; bt.textContent = 'ENVIAR'; return; }
       fimEtapa(true, r.msg || 'Registrado.', def.titulo);
     } catch (e) { const f = fila(); f.push(dados); ls.set('mq_fila', f); fimEtapa(false, 'Sem sinal: ficou guardado no celular e será enviado sozinho quando houver internet.', def.titulo); }
@@ -385,7 +387,7 @@ async function avisos(filtro) {
     app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="PAINEL=false;rota()">VOLTAR</button>'; return; }
   const lista = filtro ? r.avisos.filter(a => codDe(a.ativo) === filtro) : r.avisos;
   const cor = a => /^Aguardando aval/i.test(a.status) ? 'pend' : /parado|PT/i.test(a.status) ? 'bad' : 'lib';
-  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p></div>' +
+  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p>' + (r.perfil === 'SST' ? '<button class="btn out" id="eqp" style="width:100%;margin:12px 0 0">EQUIPE: PINS E PERFIS</button>' : '') + '</div>' +
     (lista.length ? lista.map((a, i) => '<div class="card"><div class="row" style="margin:0;display:flex;justify-content:space-between"><b>' + esc(a.n) + '</b><span class="' + cor(a) + '">' + esc(a.status) + '</span></div>' +
       '<p style="font-size:18px;font-weight:700;margin:8px 0 2px">' + esc(a.ativo) + '</p><div class="row">' + esc(a.tipo) + ' · aberto em ' + esc(a.abertura) + (a.por ? ' por ' + esc(a.por) : '') + '</div>' +
       (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info.replace(/^Operador:\s*/, '')) + '</div>' : '') +
@@ -394,6 +396,7 @@ async function avisos(filtro) {
      : '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0">Nenhum aviso aberto</h2></div>') +
     '<button class="btn out" id="avvolta">VOLTAR</button>';
   app.querySelectorAll('[data-av]').forEach(b => b.onclick = () => decidir(lista[+b.dataset.av], r.opcoes, filtro));
+  const eqp = document.getElementById('eqp'); if (eqp) eqp.onclick = () => equipe();
   document.getElementById('avvolta').onclick = () => { PAINEL = false; if (!COD) history.pushState(null, '', '/'); rota(); };
 }
 function decidir(a, opcoes, filtro) {
@@ -420,6 +423,52 @@ function decidir(a, opcoes, filtro) {
       document.getElementById('fv').onclick = () => avisos(filtro);
     } catch (e) { er.textContent = 'Sem sinal. Tente de novo quando houver internet.'; bt.disabled = false; bt.textContent = 'REGISTRAR DECISÃO'; }
   };
+}
+
+/* ----- Equipe (só SST): perfil e PIN de cada pessoa ----- */
+async function equipe(busca) {
+  const s = sessao(); if (!s) return login(() => equipe());
+  app.innerHTML = '<p class="load">Carregando a equipe…</p>';
+  let r; try { r = await api({ acao: 'equipe', token: s.token }); } catch (e) { r = { ok: false, erro: 'Sem sinal. A equipe precisa de internet.' }; }
+  if (!r.ok) { app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="avisos()">VOLTAR</button>'; return; }
+  const tag = p => p === 'SST' ? '<span class="crit" style="background:var(--navy)">SST</span>' : p === 'Encarregado' ? '<span class="crit" style="background:var(--ok)">ENCARREGADO</span>' : '';
+  const desenha = f => {
+    const n = (f || '').toLowerCase(), l = r.equipe.filter(x => !n || x.nome.toLowerCase().includes(n) || x.mat.includes(n));
+    document.getElementById('eql').innerHTML = l.map(x => '<a href="#" data-m="' + esc(x.mat) + '"><span><b>' + esc(x.nome) + '</b>' + tag(x.perfil) + '<br><small style="color:#667">Matrícula ' + esc(x.mat) + ' · ' + esc(x.treinos || '—') + ' · PIN ' + (x.pinProprio ? 'próprio' : 'padrão') + '</small></span><span>›</span></a>').join('') || '<p class="row">Ninguém encontrado.</p>';
+    document.querySelectorAll('#eql [data-m]').forEach(a => a.onclick = ev => { ev.preventDefault(); editaPessoa(r.equipe.find(x => x.mat === a.dataset.m), document.getElementById('eqb').value); });
+  };
+  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Equipe – ' + esc(s.cli) + '</h2><p class="row" style="margin:0">' + r.equipe.length + ' pessoas. Toque para trocar o perfil ou o PIN.</p>' +
+    '<input class="t" id="eqb" placeholder="Buscar nome ou matrícula" style="margin-top:12px" value="' + esc(busca || '') + '"></div><div class="card rec" id="eql"></div><button class="btn out" id="eqv">VOLTAR AOS AVISOS</button>';
+  document.getElementById('eqb').oninput = ev => desenha(ev.target.value);
+  document.getElementById('eqv').onclick = () => avisos();
+  desenha(busca);
+}
+function editaPessoa(x, busca) {
+  let perfil = x.perfil;
+  const P = ['Operador', 'Encarregado', 'SST'];
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">Matrícula ' + esc(x.mat) + '</p><h2 style="margin:6px 0 2px;font-size:20px">' + esc(x.nome) + '</h2><div class="row">Treinamentos: ' + esc(x.treinos || '—') + '</div></div>' +
+    '<div class="card"><label class="f" style="margin-top:0">Perfil no app</label><div class="seg" id="pf">' + P.map(p => '<button class="s-x' + (p === perfil ? ' on' : '') + '" data-p="' + p + '">' + p + '</button>').join('') + '</div>' +
+    '<p class="row" style="font-size:12px">Operador: checklists e etapas. Encarregado: também decide os avisos. SST: também gerencia a equipe.</p>' +
+    '<label class="f">PIN novo (4 a 8 números) – deixe vazio para manter</label><input class="t" id="pn" inputmode="numeric" maxlength="8" autocomplete="off">' +
+    '<p class="row" style="font-size:12px">PIN atual: ' + (x.pinProprio ? 'próprio (definido pelo SST)' : 'padrão – 4 últimos dígitos da matrícula') + '.</p>' +
+    (x.pinProprio ? '<button class="btn out" id="pdef" style="width:100%;margin:6px 0 0">VOLTAR AO PIN PADRÃO</button>' : '') +
+    '<div class="erro" id="perr"></div></div><button class="btn sec" id="psv">SALVAR</button><button class="btn out" id="pvt">VOLTAR</button>';
+  const pf = document.getElementById('pf');
+  pf.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; perfil = b.dataset.p; pf.querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); };
+  document.getElementById('pvt').onclick = () => equipe(busca);
+  const salva = async pin => {
+    const er = document.getElementById('perr'), bt = document.getElementById('psv'), s = sessao();
+    if (pin && pin !== 'PADRAO' && !/^\d{4,8}$/.test(pin)) { er.textContent = 'O PIN precisa ter de 4 a 8 números.'; return; }
+    bt.disabled = true; bt.textContent = 'SALVANDO…';
+    try {
+      const r = await api({ acao: 'equipeSalvar', token: s.token, mat: x.mat, perfil, pin });
+      if (!r.ok) { er.textContent = r.erro; bt.disabled = false; bt.textContent = 'SALVAR'; return; }
+      app.innerHTML = '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0 0 8px">Salvo</h2><p class="row">' + esc(r.msg) + '</p>' + (pin && pin !== 'PADRAO' ? '<p class="row"><b>Entregue o PIN pessoalmente.</b> Ele não aparece mais no app.</p>' : '') + '</div><button class="btn nav" id="pok">VOLTAR À EQUIPE</button>';
+      document.getElementById('pok').onclick = () => equipe(busca);
+    } catch (e) { er.textContent = 'Sem sinal. Tente de novo.'; bt.disabled = false; bt.textContent = 'SALVAR'; }
+  };
+  document.getElementById('psv').onclick = () => salva(document.getElementById('pn').value.trim());
+  const pd = document.getElementById('pdef'); if (pd) pd.onclick = () => salva('PADRAO');
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
