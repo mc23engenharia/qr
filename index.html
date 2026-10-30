@@ -79,7 +79,7 @@ const CSV_ATIVOS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT50D-kZo9oG
 const CSV_STATUS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT50D-kZo9oGv1OiTLn5ALf5O3d0z5spQrNeNSUF3ckG8huUwDMHSEbxAuEXZBazL3ea51RH69iPzTN/pub?gid=1912443581&single=true&output=csv';
 
 const q = new URLSearchParams(location.search);
-let ALT = {};
+let ALT = {}, PAINEL = q.get('painel') === '1';
 let CLI = (q.get('c') || '').trim().toUpperCase(), COD = (q.get('a') || '').trim().toUpperCase();
 const app = document.getElementById('app'), quem = document.getElementById('quem');
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -130,7 +130,8 @@ function bannerFila() { const n = fila().length; return n ? '<div class="banner 
 window.addEventListener('online', enviaFila);
 
 /* ===== Rotas ===== */
-function rota() { mostraQuem(); if (COD) ficha(); else inicio(); }
+function rota() { mostraQuem(); if (COD) ficha(); else if (PAINEL) avisos(); else inicio(); }
+const gestor = () => { const s = sessao(); return s && s.perfil && s.perfil !== 'Operador'; };
 function vaiPara(cli, cod) { history.pushState(null, '', '/?c=' + encodeURIComponent(cli) + '&a=' + encodeURIComponent(cod)); CLI = cli; COD = cod; rota(); }
 window.addEventListener('popstate', () => { const p = new URLSearchParams(location.search); CLI = (p.get('c') || '').toUpperCase(); COD = (p.get('a') || '').toUpperCase(); rota(); });
 
@@ -140,6 +141,7 @@ function inicio() {
   app.innerHTML = bannerFila() +
     '<div class="card"><h2 style="margin:0 0 6px">Escaneie o QR do equipamento</h2><p class="row" style="margin:0">Use a câmera do celular na etiqueta MaqCheck. ' + (s ? 'Você está como <b>' + esc(s.nome) + '</b>.' : '') + '</p></div>' +
     ('BarcodeDetector' in window ? '<button class="btn nav" id="ler">LER QR AGORA</button>' : '') +
+    '<button class="btn out" id="painel">' + (gestor() ? 'AVISOS ABERTOS – DECIDIR' : 'SOU ENCARREGADO / SST') + '</button>' +
     '<div class="card"><label class="f" style="margin-top:0">Ou digite o código da etiqueta</label>' +
     '<div style="display:flex;gap:8px"><input class="t" id="cli" placeholder="Empresa" value="' + esc(CLI || (s && s.cli) || '') + '" style="width:34%;text-transform:uppercase">' +
     '<input class="t" id="cod" placeholder="Ex.: ZI-EMP-01" style="text-transform:uppercase"></div>' +
@@ -150,6 +152,7 @@ function inicio() {
     if (c && a) vaiPara(c, a);
   };
   const ler = document.getElementById('ler'); if (ler) ler.onclick = lerQR;
+  document.getElementById('painel').onclick = () => { PAINEL = true; history.pushState(null, '', '/?painel=1'); avisos(); };
   enviaFila();
 }
 async function lerQR() {
@@ -223,6 +226,7 @@ async function ficha() {
   app.innerHTML = html; document.title = g('Código') + ' – MaqCheck';
   const b = document.getElementById('fazer'); if (b) b.onclick = () => sessao() ? checklist() : login(checklist);
   app.querySelectorAll('[data-f]').forEach(x => x.onclick = () => etapa(x.dataset.f));
+  if (gestor()) { app.insertAdjacentHTML('beforeend', '<button class="btn out" id="vav">AVISOS ABERTOS – DECIDIR</button>'); document.getElementById('vav').onclick = () => avisos(COD); }
   enviaFila();
 }
 
@@ -242,7 +246,7 @@ function login(depois) {
     try {
       const r = await api({ acao: 'login', cli, mat, pin });
       if (!r.ok) { er.textContent = r.erro || 'Não foi possível entrar.'; bt.disabled = false; bt.textContent = 'ENTRAR'; return; }
-      ls.set('mq_sessao', { cli, mat, nome: r.nome, token: r.token, validade: r.validade }); mostraQuem(); depois();
+      ls.set('mq_sessao', { cli, mat, nome: r.nome, perfil: r.perfil || 'Operador', token: r.token, validade: r.validade }); CLI = CLI || cli; mostraQuem(); depois();
     } catch (e) { er.textContent = 'Sem sinal. O login precisa de internet uma vez por turno.'; bt.disabled = false; bt.textContent = 'ENTRAR'; }
   };
 }
@@ -370,6 +374,52 @@ function fimEtapa(enviado, msg, titulo) {
   app.innerHTML = '<div class="card ok-big"><div class="m" style="background:' + (enviado ? 'var(--ok)' : 'var(--amb)') + '">' + (enviado ? '✓' : '⏳') + '</div><h2 style="margin:0 0 8px">' + esc(titulo) + '</h2><p class="row">' + esc(msg) + '</p>' +
     '<p class="row" style="font-size:12px">A ficha do equipamento atualiza em alguns minutos.</p></div><button class="btn nav" id="fvolta">VOLTAR À FICHA</button>';
   document.getElementById('fvolta').onclick = rota;
+}
+
+/* ----- Painel do encarregado / SST: avisos abertos e decisão ----- */
+async function avisos(filtro) {
+  const s = sessao(); if (!s) return login(() => avisos(filtro));
+  app.innerHTML = '<p class="load">Buscando avisos abertos…</p>';
+  let r; try { r = await api({ acao: 'avisos', token: s.token }); } catch (e) { app.innerHTML = '<div class="card"><p>Sem sinal. O painel de avisos precisa de internet.</p></div><button class="btn out" onclick="PAINEL=false;rota()">VOLTAR</button>'; return; }
+  if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); return login(() => avisos(filtro)); }
+    app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="PAINEL=false;rota()">VOLTAR</button>'; return; }
+  const lista = filtro ? r.avisos.filter(a => codDe(a.ativo) === filtro) : r.avisos;
+  const cor = a => /^Aguardando aval/i.test(a.status) ? 'pend' : /parado|PT/i.test(a.status) ? 'bad' : 'lib';
+  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p></div>' +
+    (lista.length ? lista.map((a, i) => '<div class="card"><div class="row" style="margin:0;display:flex;justify-content:space-between"><b>' + esc(a.n) + '</b><span class="' + cor(a) + '">' + esc(a.status) + '</span></div>' +
+      '<p style="font-size:18px;font-weight:700;margin:8px 0 2px">' + esc(a.ativo) + '</p><div class="row">' + esc(a.tipo) + ' · aberto em ' + esc(a.abertura) + (a.por ? ' por ' + esc(a.por) : '') + '</div>' +
+      (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info) + '</div>' : '') +
+      (a.decisao ? '<div class="row"><b>Última decisão:</b> ' + esc(a.decisao) + '</div>' : '') +
+      '<button class="btn sec" data-av="' + i + '" style="width:100%;margin:12px 0 0">DECIDIR</button></div>').join('')
+     : '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0">Nenhum aviso aberto</h2></div>') +
+    '<button class="btn out" id="avvolta">VOLTAR</button>';
+  app.querySelectorAll('[data-av]').forEach(b => b.onclick = () => decidir(lista[+b.dataset.av], r.opcoes, filtro));
+  document.getElementById('avvolta').onclick = () => { PAINEL = false; if (!COD) history.pushState(null, '', '/'); rota(); };
+}
+function decidir(a, opcoes, filtro) {
+  let dec = '';
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(a.n) + ' · ' + esc(a.tipo) + '</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(a.ativo) + '</h2>' +
+    (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info) + '</div>' : '') + '</div>' +
+    '<div class="card"><label class="f" style="margin-top:0">Decisão <span class="obr">*</span></label><div class="opc" id="dop">' + opcoes.map((o, j) => '<button data-j="' + j + '">' + esc(o) + '</button>').join('') + '</div>' +
+    '<label class="f">Nº da OS de manutenção / PT (se houver)</label><input class="t" id="dnum">' +
+    '<label class="f">Providência / observação</label><textarea class="t" id="dobs" rows="3" placeholder="O que foi verificado ou o que será feito"></textarea><div class="erro" id="derr"></div></div>' +
+    '<button class="btn sec" id="denv">REGISTRAR DECISÃO</button><button class="btn out" id="dvolta">VOLTAR</button>';
+  const dop = document.getElementById('dop');
+  dop.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; dec = opcoes[+b.dataset.j]; dop.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
+  document.getElementById('dvolta').onclick = () => avisos(filtro);
+  document.getElementById('denv').onclick = async () => {
+    const er = document.getElementById('derr'), num = document.getElementById('dnum').value.trim(), obs = document.getElementById('dobs').value.trim(), s = sessao();
+    if (!dec) { er.textContent = 'Escolha a decisão.'; return; }
+    if (!/^Liberar/.test(dec) && !num && !obs) { er.textContent = 'Informe o nº da OS/PT ou descreva a providência.'; return; }
+    if (!s) return login(() => decidir(a, opcoes, filtro));
+    const bt = document.getElementById('denv'); bt.disabled = true; bt.textContent = 'REGISTRANDO…';
+    try {
+      const r = await api({ acao: 'decidir', token: s.token, av: a.n, dec, num, obs, id: Date.now() + '-' + Math.random().toString(36).slice(2, 8) });
+      if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); } er.textContent = r.erro || 'Não foi possível registrar.'; bt.disabled = false; bt.textContent = 'REGISTRAR DECISÃO'; return; }
+      app.innerHTML = '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0 0 8px">Decisão registrada</h2><p class="row">' + esc(r.msg) + '</p><p class="row"><b>' + esc(dec) + '</b></p></div><button class="btn nav" id="fv">VOLTAR AOS AVISOS</button>';
+      document.getElementById('fv').onclick = () => avisos(filtro);
+    } catch (e) { er.textContent = 'Sem sinal. Tente de novo quando houver internet.'; bt.disabled = false; bt.textContent = 'REGISTRAR DECISÃO'; }
+  };
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
