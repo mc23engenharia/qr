@@ -388,7 +388,7 @@ async function avisos(filtro) {
   app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p></div>' +
     (lista.length ? lista.map((a, i) => '<div class="card"><div class="row" style="margin:0;display:flex;justify-content:space-between"><b>' + esc(a.n) + '</b><span class="' + cor(a) + '">' + esc(a.status) + '</span></div>' +
       '<p style="font-size:18px;font-weight:700;margin:8px 0 2px">' + esc(a.ativo) + '</p><div class="row">' + esc(a.tipo) + ' · aberto em ' + esc(a.abertura) + (a.por ? ' por ' + esc(a.por) : '') + '</div>' +
-      (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info) + '</div>' : '') +
+      (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info.replace(/^Operador:\s*/, '')) + '</div>' : '') +
       (a.decisao ? '<div class="row"><b>Última decisão:</b> ' + esc(a.decisao) + '</div>' : '') +
       '<button class="btn sec" data-av="' + i + '" style="width:100%;margin:12px 0 0">DECIDIR</button></div>').join('')
      : '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0">Nenhum aviso aberto</h2></div>') +
@@ -399,7 +399,7 @@ async function avisos(filtro) {
 function decidir(a, opcoes, filtro) {
   let dec = '';
   app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(a.n) + ' · ' + esc(a.tipo) + '</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(a.ativo) + '</h2>' +
-    (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info) + '</div>' : '') + '</div>' +
+    (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info.replace(/^Operador:\s*/, '')) + '</div>' : '') + '</div>' +
     '<div class="card"><label class="f" style="margin-top:0">Decisão <span class="obr">*</span></label><div class="opc" id="dop">' + opcoes.map((o, j) => '<button data-j="' + j + '">' + esc(o) + '</button>').join('') + '</div>' +
     '<label class="f">Nº da OS de manutenção / PT (se houver)</label><input class="t" id="dnum">' +
     '<label class="f">Providência / observação</label><textarea class="t" id="dobs" rows="3" placeholder="O que foi verificado ou o que será feito"></textarea><div class="erro" id="derr"></div></div>' +
