@@ -388,7 +388,7 @@ async function avisos(filtro) {
     app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="PAINEL=false;rota()">VOLTAR</button>'; return; }
   const lista = filtro ? r.avisos.filter(a => codDe(a.ativo) === filtro) : r.avisos;
   const cor = a => /^Aguardando aval/i.test(a.status) ? 'pend' : /parado|PT/i.test(a.status) ? 'bad' : 'lib';
-  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p>' + (r.perfil === 'SST' ? '<button class="btn out" id="eqp" style="width:100%;margin:12px 0 0">EQUIPE: PINS E PERFIS</button><button class="btn nav" id="dos" style="width:100%;margin:10px 0 0">GERAR DOSSIÊ ÚNICO (PDF)</button>' : '') + '</div>' +
+  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p>' + '<button class="btn nav" id="docs" style="width:100%;margin:12px 0 0">' + (r.perfil === 'Engenheiro' ? 'MAQLAUDO – DOCUMENTOS OFICIAIS' : 'DOCUMENTOS OFICIAIS (LAUDOS)') + '</button>' + (/^(SST|Engenheiro)$/.test(r.perfil) ? '<button class="btn out" id="eqp" style="width:100%;margin:10px 0 0">EQUIPE: PINS E PERFIS</button>' : '') + (r.perfil === 'Engenheiro' ? '<button class="btn out" id="dos" style="width:100%;margin:10px 0 0">DOSSIÊ DE EVIDÊNCIAS (PDF)</button>' : '') + '</div>' +
     (lista.length ? lista.map((a, i) => '<div class="card"><div class="row" style="margin:0;display:flex;justify-content:space-between"><b>' + esc(a.n) + '</b><span class="' + cor(a) + '">' + esc(a.status) + '</span></div>' +
       '<p style="font-size:18px;font-weight:700;margin:8px 0 2px">' + esc(a.ativo) + '</p><div class="row">' + esc(a.tipo) + ' · aberto em ' + esc(a.abertura) + (a.por ? ' por ' + esc(a.por) : '') + '</div>' +
       (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info.replace(/^Operador:\s*/, '')) + '</div>' : '') +
@@ -397,7 +397,7 @@ async function avisos(filtro) {
      : '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0">Nenhum aviso aberto</h2></div>') +
     '<button class="btn out" id="avvolta">VOLTAR</button>';
   app.querySelectorAll('[data-av]').forEach(b => b.onclick = () => decidir(lista[+b.dataset.av], r.opcoes, filtro));
-  const eqp = document.getElementById('eqp'); if (eqp) eqp.onclick = () => equipe();
+  const eqp = document.getElementById('eqp'); if (eqp) eqp.onclick = () => equipe(); document.getElementById('docs').onclick = () => docs();
   const dos = document.getElementById('dos'); if (dos) dos.onclick = async () => {
     dos.disabled = true; dos.textContent = 'GERANDO O DOSSIÊ… (até 1 minuto)';
     try { const d = await api({ acao: 'dossie', token: s.token, dias: 90 });
@@ -409,6 +409,78 @@ async function avisos(filtro) {
   };
   if (pres) pres.then(rs => { if (rs && rs.ok && document.getElementById('avvolta')) app.insertAdjacentHTML('afterbegin', cartaoHoje(rs)); });
   document.getElementById('avvolta').onclick = () => { PAINEL = false; if (!COD) history.pushState(null, '', '/'); rota(); };
+}
+/* ===== MaqLaudo: documentos oficiais assinados ===== */
+function abrePdf(b64, nome) {
+  const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([u], { type: 'application/pdf' })), a = document.createElement('a');
+  a.href = url; a.download = nome || 'documento.pdf'; a.target = '_blank'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+let DOCF = 'pend';
+async function docs() {
+  const s = sessao(); if (!s) return login(() => docs());
+  app.innerHTML = '<div class="card"><p>Carregando documentos…</p></div>';
+  let r; try { r = await api({ acao: 'docs', token: s.token }); } catch (e) { app.innerHTML = '<div class="card"><p>Sem sinal. Os documentos precisam de internet.</p></div><button class="btn out" onclick="avisos()">VOLTAR</button>'; return; }
+  if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); return login(() => docs()); } app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="avisos()">VOLTAR</button>'; return; }
+  const eng = r.perfil === 'Engenheiro', grp = d => /^Vencido/.test(d.situacao) ? 0 : /^Vence/.test(d.situacao) ? 1 : /^N/.test(d.situacao) ? 2 : 3;
+  const cont = [0, 0, 0, 0]; r.docs.forEach(d => cont[grp(d)]++);
+  const cls = d => ['bad', 'pend', 'pend', 'lib'][grp(d)];
+  const num = (n, t, c) => '<div style="flex:1;text-align:center"><div style="font-size:24px;font-weight:800;color:' + c + '">' + n + '</div><div style="font-size:10px;color:#5b6573;text-transform:uppercase">' + t + '</div></div>';
+  const filtros = { pend: ['Pendentes', d => grp(d) < 3], meus: ['Meus', d => d.resp === r.meu], ok: ['Vigentes', d => grp(d) === 3], todos: ['Todos', () => true] };
+  if (!eng && DOCF === 'meus') DOCF = 'pend';
+  const lista = r.docs.filter(filtros[DOCF][1]).sort((a, b) => grp(a) - grp(b));
+  const item = (d, i) => '<div class="card" style="padding:12px 14px"><div class="row" style="margin:0;display:flex;justify-content:space-between;gap:8px"><b>' + esc(d.doc) + '</b><span class="' + cls(d) + '" style="white-space:nowrap">' + esc(d.situacao) + '</span></div>' +
+    '<div class="row">' + esc(d.escopo === 'Empresa' ? 'Empresa toda' : d.escopo) + '</div><div class="row" style="font-size:12px">' + esc(d.respNome) + (d.validade ? ' · válido até ' + esc(d.validade) : d.assinado ? ' · validade conforme documento' : ' · periodicidade ' + (d.meses ? d.meses + ' meses' : 'conforme AVCB')) + (d.art ? ' · ART ' + esc(d.art) : '') + '</div>' +
+    (d.assinado && eng ? '<div class="row" style="font-size:12px">Assinatura digital: <b class="' + (/^Detect/.test(d.sig) ? 'lib' : 'bad') + '">' + esc(d.sig) + '</b></div>' : '') +
+    '<div style="display:flex;gap:8px;margin-top:10px">' + (eng ? '<button class="btn out" data-min="' + i + '" style="flex:1;margin:0;padding:10px 4px;font-size:13px">MINUTA</button><button class="btn sec" data-env="' + i + '" style="flex:1;margin:0;padding:10px 4px;font-size:13px">' + (d.assinado ? 'RENOVAR' : 'ENVIAR ASSINADO') + '</button>' : '') +
+    (d.assinado ? '<button class="btn nav" data-bx="' + i + '" style="flex:1;margin:0;padding:10px 4px;font-size:13px">BAIXAR PDF</button>' : '') + '</div></div>';
+  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">' + (eng ? 'MaqLaudo' : 'Documentos oficiais') + '</h2><p class="row" style="margin:0 0 10px">' + esc(s.cli) + ' · ' + r.docs.length + ' documentos exigidos · ' + (eng ? 'gere a minuta, assine no gov.br e envie o PDF assinado' : 'laudos assinados pelos engenheiros responsáveis') + '</p><div style="display:flex;gap:4px">' +
+    num(cont[3], 'vigentes', 'var(--ok)') + num(cont[1], 'vencendo', cont[1] ? 'var(--amb)' : 'var(--ok)') + num(cont[0], 'vencidos', cont[0] ? 'var(--red)' : 'var(--ok)') + num(cont[2], 'não emitidos', cont[2] ? 'var(--amb)' : 'var(--ok)') + '</div>' +
+    '<div class="prog" style="margin-top:10px"><i style="width:' + Math.round(100 * cont[3] / Math.max(1, r.docs.length)) + '%"></i></div>' +
+    '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">' + Object.keys(filtros).filter(k => eng || k !== 'meus').map(k => '<button class="btn ' + (k === DOCF ? 'nav' : 'out') + '" data-f="' + k + '" style="flex:1;margin:0;padding:8px 4px;font-size:12px">' + filtros[k][0] + '</button>').join('') + '</div></div>' +
+    (eng ? '<button class="btn sec" id="dof">GERAR DOSSIÊ OFICIAL (ZIP)</button>' : '') +
+    (lista.length ? lista.map(item).join('') : '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0">Nada nesta lista</h2></div>') + '<button class="btn out" id="dcv">VOLTAR</button>';
+  app.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { DOCF = b.dataset.f; docs(); });
+  document.getElementById('dcv').onclick = () => avisos();
+  const baixa = async (b, acao, d) => { const t = b.textContent; b.disabled = true; b.textContent = 'GERANDO…';
+    try { const x = await api({ acao, token: s.token, id: d.id }); if (!x.ok) { b.textContent = 'ERRO'; alert(x.erro); } else { abrePdf(x.b64, x.nome); b.textContent = t; } } catch (e) { b.textContent = 'SEM SINAL'; } b.disabled = false; };
+  app.querySelectorAll('[data-min]').forEach(b => b.onclick = () => baixa(b, 'minuta', lista[+b.dataset.min]));
+  app.querySelectorAll('[data-bx]').forEach(b => b.onclick = () => baixa(b, 'docBaixar', lista[+b.dataset.bx]));
+  app.querySelectorAll('[data-env]').forEach(b => b.onclick = () => docEnviar(lista[+b.dataset.env]));
+  const dof = document.getElementById('dof'); if (dof) dof.onclick = async () => {
+    dof.disabled = true; dof.textContent = 'MONTANDO O DOSSIÊ… (até 1 minuto)';
+    try { const x = await api({ acao: 'dossieOficial', token: s.token }); if (!x.ok) { dof.textContent = x.erro || 'Não foi possível.'; dof.disabled = false; return; }
+      app.innerHTML = '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0 0 8px">Dossiê Oficial gerado</h2><p class="row">' + esc(x.nome) + '</p><p class="row"><b>' + x.assinados + '</b> documento(s) assinados e vigentes · <b class="' + (x.pendentes ? 'bad' : 'lib') + '">' + x.pendentes + ' pendente(s)</b> · nº ' + esc(x.numero) + '</p><p class="row" style="font-size:12px">ZIP com índice e os PDFs originais assinados (sem mesclar, para não invalidar as assinaturas). O hash SHA-256 de cada arquivo está no índice. Salvo em "Documentos oficiais / Dossiê Oficial".</p></div>' +
+        '<a class="btn sec" href="' + esc(x.url) + '" target="_blank" rel="noopener">ABRIR NO DRIVE</a><button class="btn out" id="dvt">VOLTAR AOS DOCUMENTOS</button>';
+      document.getElementById('dvt').onclick = () => docs();
+    } catch (e) { dof.textContent = 'Sem sinal. Tente de novo.'; dof.disabled = false; }
+  };
+}
+function docEnviar(d) {
+  const s = sessao(), hoje = new Date().toISOString().slice(0, 10);
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(d.id) + ' · ' + esc(d.respNome) + '</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(d.doc) + '</h2><div class="row">' + esc(d.escopo === 'Empresa' ? 'Empresa toda' : d.escopo) + '</div></div>' +
+    '<div class="card"><label class="f" style="margin-top:0">PDF assinado digitalmente <span class="obr">*</span></label><input type="file" accept="application/pdf" id="epdf" class="t">' +
+    '<label class="f">Nº da ART</label><input class="t" id="eart" value="' + esc(d.art || '') + '">' +
+    '<label class="f">Data de emissão <span class="obr">*</span></label><input type="date" class="t" id="eemi" value="' + hoje + '">' +
+    '<label class="f">Validade' + (d.meses ? ' (deixe em branco para ' + d.meses + ' meses)' : ' <span class="obr">*</span>') + '</label><input type="date" class="t" id="eval">' +
+    '<p class="row" style="font-size:12px">Assine o PDF no gov.br (assinador.iti.br) ou com certificado ICP-Brasil antes de enviar. O sistema confere a assinatura e guarda o hash do arquivo.</p><div class="erro" id="eerr"></div></div>' +
+    '<button class="btn sec" id="eenv">ENVIAR DOCUMENTO</button><button class="btn out" id="evt">VOLTAR</button>';
+  document.getElementById('evt').onclick = () => docs();
+  document.getElementById('eenv').onclick = async () => {
+    const er = document.getElementById('eerr'), f = document.getElementById('epdf').files[0], val = document.getElementById('eval').value, emi = document.getElementById('eemi').value;
+    if (!f) { er.textContent = 'Escolha o PDF assinado.'; return; }
+    if (f.size > 20e6) { er.textContent = 'PDF acima de 20 MB.'; return; }
+    if (!emi) { er.textContent = 'Informe a data de emissão.'; return; }
+    if (!d.meses && !val) { er.textContent = 'Informe a validade do documento.'; return; }
+    const bt = document.getElementById('eenv'); bt.disabled = true; bt.textContent = 'ENVIANDO…';
+    try {
+      const b64 = await new Promise((ok, no) => { const rd = new FileReader(); rd.onload = () => ok(String(rd.result).split(',')[1]); rd.onerror = no; rd.readAsDataURL(f); });
+      const x = await api({ acao: 'docEnviar', token: s.token, id: d.id, b64, art: document.getElementById('eart').value, emissao: emi, validade: val });
+      if (!x.ok) { er.textContent = x.erro || 'Não foi possível enviar.'; bt.disabled = false; bt.textContent = 'ENVIAR DOCUMENTO'; return; }
+      app.innerHTML = '<div class="card ok-big"><div class="m">' + (x.sig ? '✓' : '!') + '</div><h2 style="margin:0 0 8px">Documento registrado</h2><p class="row">' + esc(x.msg) + '</p><p class="row" style="font-size:12px">Já aparece no painel da empresa para download.</p></div><button class="btn nav" id="fv">VOLTAR AOS DOCUMENTOS</button>';
+      document.getElementById('fv').onclick = () => docs();
+    } catch (e) { er.textContent = 'Sem sinal. Tente de novo.'; bt.disabled = false; bt.textContent = 'ENVIAR DOCUMENTO'; }
+  };
 }
 function cartaoHoje(r) {
   const pend = r.checklists.filter(x => !x.feito), feitos = r.checklists.filter(x => x.feito), resAl = r.residuos.filter(x => x.alerta);
