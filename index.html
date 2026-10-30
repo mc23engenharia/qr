@@ -382,6 +382,7 @@ function fimEtapa(enviado, msg, titulo) {
 async function avisos(filtro) {
   const s = sessao(); if (!s) return login(() => avisos(filtro));
   app.innerHTML = '<p class="load">Buscando avisos abertos…</p>';
+  const pres = filtro ? null : api({ acao: 'resumo', token: s.token }).catch(() => null);
   let r; try { r = await api({ acao: 'avisos', token: s.token }); } catch (e) { app.innerHTML = '<div class="card"><p>Sem sinal. O painel de avisos precisa de internet.</p></div><button class="btn out" onclick="PAINEL=false;rota()">VOLTAR</button>'; return; }
   if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); return login(() => avisos(filtro)); }
     app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="PAINEL=false;rota()">VOLTAR</button>'; return; }
@@ -397,7 +398,22 @@ async function avisos(filtro) {
     '<button class="btn out" id="avvolta">VOLTAR</button>';
   app.querySelectorAll('[data-av]').forEach(b => b.onclick = () => decidir(lista[+b.dataset.av], r.opcoes, filtro));
   const eqp = document.getElementById('eqp'); if (eqp) eqp.onclick = () => equipe();
+  if (pres) pres.then(rs => { if (rs && rs.ok && document.getElementById('avvolta')) app.insertAdjacentHTML('afterbegin', cartaoHoje(rs)); });
   document.getElementById('avvolta').onclick = () => { PAINEL = false; if (!COD) history.pushState(null, '', '/'); rota(); };
+}
+function cartaoHoje(r) {
+  const pend = r.checklists.filter(x => !x.feito), feitos = r.checklists.filter(x => x.feito), resAl = r.residuos.filter(x => x.alerta);
+  const num = (n, t, c) => '<div style="flex:1;text-align:center"><div style="font-size:26px;font-weight:800;color:' + c + '">' + n + '</div><div style="font-size:11px;color:#5b6573;text-transform:uppercase;letter-spacing:.4px">' + t + '</div></div>';
+  const lnk = x => '<a href="/?c=' + encodeURIComponent(CLI || sessao().cli) + '&a=' + encodeURIComponent(x.cod) + '"><span><b>' + esc(x.cod) + '</b> ' + esc(x.desc) + (x.feito ? '<br><small style="color:#667">' + esc(x.hora) + ' · ' + esc(x.quem) + ' · <span class="' + (/^OK/.test(x.res) ? 'lib' : /^(PARADO|BLOQ|EM MANUT)/.test(x.res) ? 'bad' : 'pend') + '">' + esc(x.res) + '</span></small>' : x.local ? '<br><small style="color:#667">' + esc(x.local) + '</small>' : '') + '</span><span>›</span></a>';
+  return '<div class="card"><h2 style="margin:0 0 10px">Hoje · ' + esc(r.hoje) + '</h2><div style="display:flex;gap:6px">' +
+    num(r.feitos + '/' + r.checklists.length, 'checklists', r.feitos === r.checklists.length ? 'var(--ok)' : 'var(--amb)') + num(r.avisos, 'avisos abertos', r.avisos ? 'var(--red)' : 'var(--ok)') +
+    num(resAl.length, 'resíduos no prazo', resAl.length ? 'var(--red)' : 'var(--ok)') + '</div>' +
+    '<div class="prog" style="margin-top:12px"><i style="width:' + (r.checklists.length ? Math.round(100 * r.feitos / r.checklists.length) : 0) + '%"></i></div>' +
+    '<p class="row" style="font-size:12px;margin:4px 0 0">Equipamentos com checklist diário em uso' + (r.foraDeUso ? ' (' + r.foraDeUso + ' no pátio ou em manutenção não entram)' : '') + '.</p>' +
+    (pend.length ? '<details class="mais" style="margin:10px 0 0"><summary>Sem checklist hoje (' + pend.length + ')</summary><div class="rec">' + pend.map(lnk).join('') + '</div></details>' : '') +
+    (feitos.length ? '<details class="mais" style="margin:4px 0 0"><summary>Feitos hoje (' + feitos.length + ')</summary><div class="rec">' + feitos.map(lnk).join('') + '</div></details>' : '') +
+    (r.residuos.length ? '<details class="mais" style="margin:4px 0 0"' + (resAl.length ? ' open' : '') + '><summary>Resíduos armazenados (' + r.residuos.length + ')</summary>' + r.residuos.map(x => '<div class="row"><b>' + esc(x.n) + '</b> ' + esc(x.residuo) + ' – ' + esc(x.qtd) + ' · <span class="' + (x.alerta ? 'bad' : 'lib') + '">' + (x.resta >= 0 ? 'faltam ' + x.resta + ' dias' : 'vencido há ' + (-x.resta) + ' dias') + '</span> (prazo interno ' + r.prazoResiduo + ' dias)</div>').join('') + '</details>' : '') +
+    '</div>';
 }
 function decidir(a, opcoes, filtro) {
   let dec = '';
