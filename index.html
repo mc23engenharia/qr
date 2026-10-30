@@ -388,7 +388,7 @@ async function avisos(filtro) {
     app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="PAINEL=false;rota()">VOLTAR</button>'; return; }
   const lista = filtro ? r.avisos.filter(a => codDe(a.ativo) === filtro) : r.avisos;
   const cor = a => /^Aguardando aval/i.test(a.status) ? 'pend' : /parado|PT/i.test(a.status) ? 'bad' : 'lib';
-  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p>' + (r.perfil === 'SST' ? '<button class="btn out" id="eqp" style="width:100%;margin:12px 0 0">EQUIPE: PINS E PERFIS</button>' : '') + '</div>' +
+  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p>' + (r.perfil === 'SST' ? '<button class="btn out" id="eqp" style="width:100%;margin:12px 0 0">EQUIPE: PINS E PERFIS</button><button class="btn nav" id="dos" style="width:100%;margin:10px 0 0">GERAR DOSSIÊ ÚNICO (PDF)</button>' : '') + '</div>' +
     (lista.length ? lista.map((a, i) => '<div class="card"><div class="row" style="margin:0;display:flex;justify-content:space-between"><b>' + esc(a.n) + '</b><span class="' + cor(a) + '">' + esc(a.status) + '</span></div>' +
       '<p style="font-size:18px;font-weight:700;margin:8px 0 2px">' + esc(a.ativo) + '</p><div class="row">' + esc(a.tipo) + ' · aberto em ' + esc(a.abertura) + (a.por ? ' por ' + esc(a.por) : '') + '</div>' +
       (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info.replace(/^Operador:\s*/, '')) + '</div>' : '') +
@@ -398,6 +398,15 @@ async function avisos(filtro) {
     '<button class="btn out" id="avvolta">VOLTAR</button>';
   app.querySelectorAll('[data-av]').forEach(b => b.onclick = () => decidir(lista[+b.dataset.av], r.opcoes, filtro));
   const eqp = document.getElementById('eqp'); if (eqp) eqp.onclick = () => equipe();
+  const dos = document.getElementById('dos'); if (dos) dos.onclick = async () => {
+    dos.disabled = true; dos.textContent = 'GERANDO O DOSSIÊ… (até 1 minuto)';
+    try { const d = await api({ acao: 'dossie', token: s.token, dias: 90 });
+      if (!d.ok) { dos.textContent = d.erro || 'Não foi possível gerar.'; dos.disabled = false; return; }
+      app.innerHTML = '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0 0 8px">Dossiê gerado</h2><p class="row">' + esc(d.nome) + '</p><p class="row">' + d.ativos + ' ativos · <b>' + d.pendencias + ' pendência(s)</b> no capítulo 10 · nº ' + esc(d.numero) + '</p><p class="row" style="font-size:12px">Salvo na pasta "Dossiê SST" da empresa no Google Drive. Cada responsável assina o mesmo PDF com assinatura digital (gov.br ou ICP-Brasil).</p></div>' +
+        '<a class="btn sec" href="' + esc(d.url) + '" target="_blank" rel="noopener">ABRIR O PDF</a><button class="btn out" id="dvt">VOLTAR AOS AVISOS</button>';
+      document.getElementById('dvt').onclick = () => avisos();
+    } catch (e) { dos.textContent = 'Sem sinal. Tente de novo.'; dos.disabled = false; }
+  };
   if (pres) pres.then(rs => { if (rs && rs.ok && document.getElementById('avvolta')) app.insertAdjacentHTML('afterbegin', cartaoHoje(rs)); });
   document.getElementById('avvolta').onclick = () => { PAINEL = false; if (!COD) history.pushState(null, '', '/'); rota(); };
 }
