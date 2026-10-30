@@ -108,6 +108,7 @@ async function main() {
     '<div class="row"><b>Cliente:</b> ' + esc(g('Cliente')) + '</div>' +
     (g('Modalidade') ? '<div class="row"><b>Uso:</b> ' + esc(g('Modalidade')) + '</div>' : '') +
     (g('Responsabilidade') ? '<div class="row"><b>Responsabilidade:</b> ' + esc(g('Responsabilidade')) + '</div>' : '') +
+    (g('Operadores habilitados') ? '<div class="row"><b>Operadores habilitados:</b> ' + (/^0 /.test(g('Operadores habilitados')) ? '<span class="bad">nenhum com treinamento válido</span>' : esc(g('Operadores habilitados'))) + '</div>' : '') +
     (g('Observação') ? '<div class="row">' + esc(g('Observação')) + '</div>' : '');
   // situação (aba Status QR): OK / ATENÇÃO / AGUARDANDO = amarelo; PARADO / EM MANUTENÇÃO = vermelho
   const sit = ult ? String(ult.res).toUpperCase() : '';
