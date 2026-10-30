@@ -57,6 +57,10 @@
   .opc button { display:block; width:100%; text-align:left; padding:14px; margin:8px 0; font-size:16px; border-radius:10px; border:1.5px solid var(--line); background:#fff; font-family:inherit; color:#222 }
   .opc button.on { border-color:var(--navy); background:#e8eefb; font-weight:700 }
   .fotos { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px } .fotos img { width:76px; height:76px; object-fit:cover; border-radius:8px }
+  .seg button.s-x.on { background:var(--navy); border-color:var(--navy); color:#fff }
+  .gl { padding:12px 0; border-top:1px solid var(--line) } .gl:first-of-type { border-top:0 } .gl p { margin:0 0 8px; font-size:15px }
+  .todos { background:none; border:1.5px dashed var(--ok); color:var(--ok); font-weight:700; border-radius:10px; padding:10px; width:100%; margin:4px 0 6px; font-family:inherit; font-size:14px }
+  .obr { color:var(--red) }
   .ok-big { text-align:center; padding:28px 18px } .ok-big .m { width:72px; height:72px; border-radius:50%; background:var(--ok); color:#fff; font-size:40px; line-height:72px; margin:0 auto 12px }
   .rec a { display:flex; justify-content:space-between; padding:12px 2px; border-top:1px solid var(--line); text-decoration:none; color:var(--ink) } .rec a:first-child { border-top:0 }
   .foot { font-size:11px; color:#8a93a0; text-align:center; margin:18px }
@@ -75,6 +79,7 @@ const CSV_ATIVOS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT50D-kZo9oG
 const CSV_STATUS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT50D-kZo9oGv1OiTLn5ALf5O3d0z5spQrNeNSUF3ckG8huUwDMHSEbxAuEXZBazL3ea51RH69iPzTN/pub?gid=1912443581&single=true&output=csv';
 
 const q = new URLSearchParams(location.search);
+let ALT = {};
 let CLI = (q.get('c') || '').trim().toUpperCase(), COD = (q.get('a') || '').trim().toUpperCase();
 const app = document.getElementById('app'), quem = document.getElementById('quem');
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -121,7 +126,7 @@ async function enviaFila() {
   ls.set('mq_fila', resto);
   const b = document.getElementById('fila'); if (b) b.outerHTML = bannerFila();
 }
-function bannerFila() { const n = fila().length; return n ? '<div class="banner warn" id="fila">' + n + ' checklist(s) guardado(s) aguardando sinal – envio automático.</div>' : '<span id="fila"></span>'; }
+function bannerFila() { const n = fila().length; return n ? '<div class="banner warn" id="fila">' + n + ' registro(s) guardado(s) aguardando sinal – envio automático.</div>' : '<span id="fila"></span>'; }
 window.addEventListener('online', enviaFila);
 
 /* ===== Rotas ===== */
@@ -199,23 +204,25 @@ async function ficha() {
   if (chkForm) html += '<button class="btn sec" id="fazer">FAZER CHECKLIST</button><a class="lnk" href="' + esc(chkForm) + '">Abrir no formulário (alternativa)</a>';
   else if (!pt) html += '<span class="off">Checklist online – em implantação</span>';
   const L = n => ehLink(g(n)) ? g(n) : '';
-  const et = [['ENTREGA', 'ENTREGA AO LOCATÁRIO', L('Link entrega')], ['RETIRADA', 'PEDIR RETIRADA (FIM DA LOCAÇÃO)', L('Link retirada')], ['COLETA', 'COLETA – MOTORISTA', L('Link coleta')],
-              ['CHEGADA', 'CHEGADA AO PÁTIO – DEVOLUÇÃO', L('Link devolução')], ['LIBERAÇÃO', 'LIBERAR PARA NOVA LOCAÇÃO', L('Link liberação')]];
+  const et = [['ENTREGA', 'ENTREGA AO LOCATÁRIO', L('Link entrega'), 'ENT'], ['RETIRADA', 'PEDIR RETIRADA (FIM DA LOCAÇÃO)', L('Link retirada'), 'RET'], ['COLETA', 'COLETA – MOTORISTA', L('Link coleta'), 'COL'],
+              ['CHEGADA', 'CHEGADA AO PÁTIO – DEVOLUÇÃO', L('Link devolução'), 'DEV'], ['LIBERAÇÃO', 'LIBERAR PARA NOVA LOCAÇÃO', L('Link liberação'), 'LIB']];
+  ALT = { ENT: et[0][2], RET: et[1][2], COL: et[2][2], DEV: et[3][2], LIB: et[4][2], RES: L('Link resíduo'), RESD: L('Link destinação de resíduos') };
   if (et.some(e => e[2])) {
     const uso = g('Modalidade'), at = /^(Locado|De terceiro)/.test(uso) ? 1 : /^Retirada/.test(uso) ? 2 : /^Em trânsito/.test(uso) ? 3 : /^Em manuten/.test(uso) ? 4 : 0;
     html += '<p class="sub">Locação</p><div class="passos">' + et.map((e, i) => '<span class="' + (i === at ? 'at' : i < at ? 'ok' : '') + '">' + e[0] + '</span>').join('') + '</div>';
-    if (et[at][2]) html += '<a class="btn nav" href="' + esc(et[at][2]) + '">' + et[at][1] + '</a>';
+    if (et[at][2]) html += '<button class="btn nav" data-f="' + et[at][3] + '">' + et[at][1] + '</button>';
     const out = et.filter((e, i) => i !== at && e[2]);
-    if (out.length) html += '<details class="mais"><summary>Outras etapas</summary>' + out.map(e => '<a class="btn out" href="' + esc(e[2]) + '">' + e[1] + '</a>').join('') + '</details>';
+    if (out.length) html += '<details class="mais"><summary>Outras etapas</summary>' + out.map(e => '<button class="btn out" data-f="' + e[3] + '">' + e[1] + '</button>').join('') + '</details>';
   }
   const res = L('Link resíduo'), resd = L('Link destinação de resíduos');
   if (res || resd) {
     html += '<p class="sub">Resíduos</p>';
-    if (resd) html += '<a class="btn res" href="' + esc(resd) + '">COLETA / DESTINAÇÃO (MTR E CDF)</a>';
-    if (res) html += '<a class="btn res' + (resd ? ' out' : '') + '" href="' + esc(res) + '">REGISTRAR RESÍDUO (ÓLEO, FILTRO, BATERIA, PNEU)</a>';
+    if (res) html += '<button class="btn res" data-f="RES">REGISTRAR RESÍDUO (ÓLEO, FILTRO, BATERIA, PNEU)</button>';
+    if (resd) html += '<button class="btn res' + (res ? ' out' : '') + '" data-f="RESD">COLETA / DESTINAÇÃO (MTR E CDF)</button>';
   }
   app.innerHTML = html; document.title = g('Código') + ' – MaqCheck';
   const b = document.getElementById('fazer'); if (b) b.onclick = () => sessao() ? checklist() : login(checklist);
+  app.querySelectorAll('[data-f]').forEach(x => x.onclick = () => etapa(x.dataset.f));
   enviaFila();
 }
 
@@ -302,6 +309,66 @@ function fim(enviado, msg, nc, pode) {
   app.innerHTML = '<div class="card ok-big"><div class="m" style="background:' + (enviado ? 'var(--ok)' : 'var(--amb)') + '">' + (enviado ? '✓' : '⏳') + '</div><h2 style="margin:0 0 8px">' + (enviado ? 'Checklist enviado' : 'Checklist guardado') + '</h2><p class="row">' + esc(msg) + '</p>' +
     (parado ? '<div class="blq" style="margin:14px 0 0">NÃO OPERE<small>Aguarde o responsável da área avaliar.</small></div>' : nc ? '<div class="atn" style="margin:14px 0 0">Opere com atenção<small>O responsável da área foi avisado.</small></div>' : '') +
     '<p class="row" style="font-size:12px">A situação na ficha atualiza em alguns minutos.</p></div><button class="btn nav" id="fvolta">VOLTAR À FICHA</button>';
+  document.getElementById('fvolta').onclick = rota;
+}
+
+/* ----- Etapas de campo (frota e resíduos) – o app desenha o formulário do sistema ----- */
+async function etapa(tipo) {
+  const s = sessao();
+  app.innerHTML = '<p class="load">Abrindo…</p>';
+  let def = ls.get('mq_form_' + tipo, null);
+  try { const r = await api({ acao: 'form', tipo, token: s && s.cli === CLI ? s.token : '' }); if (r.ok) { def = r; ls.set('mq_form_' + tipo, r); } } catch (e) {}
+  const alt = ALT[tipo] ? '<a class="lnk" href="' + esc(ALT[tipo]) + '">Abrir no formulário (alternativa)</a>' : '';
+  if (!def) { app.innerHTML = '<div class="card"><p>Sem sinal para abrir esta etapa.</p></div>' + alt + '<button class="btn out" onclick="rota()">VOLTAR</button>'; return; }
+  if (def.exigeLogin && (!s || s.cli !== CLI)) { if (s) localStorage.removeItem('mq_sessao'); return login(() => etapa(tipo)); }
+  const v = {}, fotos = [], hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+  const cls = (c, j) => j === 0 ? 's-ok' : /^Não conforme|^Avaria|^Falta|^Ruim|^Não/.test(c) ? 's-nc' : /aplica/i.test(c) ? 's-na' : 's-x';
+  const campo = (it, k) => {
+    const lb = '<label class="f">' + esc(it.titulo) + (it.obrig ? ' <span class="obr">*</span>' : '') + '</label>' + (it.ajuda ? '<p class="row" style="margin:-2px 0 6px;font-size:12px">' + esc(it.ajuda) + '</p>' : '');
+    if (it.tipo === 'texto') { v[it.id] = it.padrao || ''; return lb + '<input class="t" data-k="' + k + '" value="' + esc(it.padrao || '') + '"' + (/hor[ií]metro|quantidade/i.test(it.titulo) ? ' inputmode="decimal"' : '') + '>'; }
+    if (it.tipo === 'paragrafo') return lb + '<textarea class="t" data-k="' + k + '" rows="3"></textarea>';
+    if (it.tipo === 'data') { v[it.id] = hoje; return lb + '<input class="t" type="date" data-k="' + k + '" value="' + hoje + '">'; }
+    if (it.tipo === 'escolha' || it.tipo === 'caixas') { v[it.id] = it.tipo === 'caixas' ? [] : ''; return lb + '<div class="opc" data-k="' + k + '">' + it.opcoes.map((o, j) => '<button data-j="' + j + '">' + esc(o) + '</button>').join('') + '</div>'; }
+    if (it.tipo === 'grade') { v[it.id] = it.linhas.map(() => '');
+      return lb + '<div class="card" style="margin:0;padding:6px 12px;border:1px solid var(--line);box-shadow:none"><button class="todos" data-todos="' + k + '">TODOS: ' + esc(it.colunas[0]).toUpperCase() + '</button>' +
+        it.linhas.map((l, i) => '<div class="gl"><p>' + esc(l) + '</p><div class="seg" data-k="' + k + '" data-i="' + i + '">' + it.colunas.map((c, j) => '<button class="' + cls(c, j) + '" data-j="' + j + '">' + esc(c) + '</button>').join('') + '</div></div>').join('') + '</div>'; }
+    return '';
+  };
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(COD) + '</p><h2 style="margin:6px 0 2px;font-size:20px">' + esc(def.titulo) + '</h2>' +
+    (s ? '<p class="row" style="margin:2px 0 0">Responsável: <b>' + esc(s.nome) + '</b></p>' : '') + '</div>' +
+    '<div class="card">' + def.itens.map(campo).join('') +
+    '<label class="f">Fotos (até 4)</label><input type="file" id="ft" accept="image/*" capture="environment" multiple><div class="fotos" id="fts"></div><div class="erro" id="eerr"></div></div>' +
+    '<button class="btn sec" id="env">ENVIAR</button>' + alt + '<button class="btn out" id="evolta">CANCELAR</button>';
+  app.querySelectorAll('input[data-k],textarea[data-k]').forEach(x => x.oninput = () => { v[def.itens[+x.dataset.k].id] = x.value.trim(); });
+  app.querySelectorAll('.opc[data-k]').forEach(g => g.onclick = ev => {
+    const b = ev.target.closest('button'); if (!b) return; const it = def.itens[+g.dataset.k], o = it.opcoes[+b.dataset.j];
+    if (it.tipo === 'caixas') { const a = v[it.id], i = a.indexOf(o); i < 0 ? a.push(o) : a.splice(i, 1); b.classList.toggle('on', i < 0); }
+    else { v[it.id] = o; g.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); }
+  });
+  const marca = (g, j) => { const it = def.itens[+g.dataset.k]; v[it.id][+g.dataset.i] = it.colunas[j]; g.querySelectorAll('button').forEach((x, n) => x.classList.toggle('on', n === j)); };
+  app.querySelectorAll('.seg[data-k]').forEach(g => g.onclick = ev => { const b = ev.target.closest('button'); if (b) marca(g, +b.dataset.j); });
+  app.querySelectorAll('[data-todos]').forEach(b => b.onclick = () => app.querySelectorAll('.seg[data-k="' + b.dataset.todos + '"]').forEach(g => marca(g, 0)));
+  document.getElementById('ft').onchange = async ev => {
+    for (const f of [...ev.target.files].slice(0, 4 - fotos.length)) fotos.push(await reduz(f));
+    document.getElementById('fts').innerHTML = fotos.map(x => '<img src="' + x + '">').join('');
+  };
+  document.getElementById('evolta').onclick = rota;
+  document.getElementById('env').onclick = async () => {
+    const er = document.getElementById('eerr');
+    const falta = def.itens.find(it => it.obrig && (Array.isArray(v[it.id]) ? (it.tipo === 'grade' ? v[it.id].some(x => !x) : !v[it.id].length) : !v[it.id]));
+    if (falta) { er.textContent = 'Falta responder: ' + falta.titulo; return; }
+    const s2 = sessao(), dados = { acao: 'enviarForm', tipo, token: s2 && s2.cli === CLI ? s2.token : '', cli: CLI, cod: COD, id: Date.now() + '-' + Math.random().toString(36).slice(2, 8), respostas: v, fotos: fotos.map(b64 => ({ b64 })) };
+    const bt = document.getElementById('env'); bt.disabled = true; bt.textContent = 'ENVIANDO…';
+    try {
+      const r = await api(dados);
+      if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); } er.textContent = r.erro || 'Não foi possível enviar.'; bt.disabled = false; bt.textContent = 'ENVIAR'; return; }
+      fimEtapa(true, r.msg || 'Registrado.', def.titulo);
+    } catch (e) { const f = fila(); f.push(dados); ls.set('mq_fila', f); fimEtapa(false, 'Sem sinal: ficou guardado no celular e será enviado sozinho quando houver internet.', def.titulo); }
+  };
+}
+function fimEtapa(enviado, msg, titulo) {
+  app.innerHTML = '<div class="card ok-big"><div class="m" style="background:' + (enviado ? 'var(--ok)' : 'var(--amb)') + '">' + (enviado ? '✓' : '⏳') + '</div><h2 style="margin:0 0 8px">' + esc(titulo) + '</h2><p class="row">' + esc(msg) + '</p>' +
+    '<p class="row" style="font-size:12px">A ficha do equipamento atualiza em alguns minutos.</p></div><button class="btn nav" id="fvolta">VOLTAR À FICHA</button>';
   document.getElementById('fvolta').onclick = rota;
 }
 
