@@ -18,6 +18,13 @@
   .btn { display:block; text-align:center; text-decoration:none; font-weight:bold; font-size:18px; border-radius:8px; padding:15px; margin:12px 16px; color:#fff; background:var(--acc) }
   .btn.sec { background:var(--ok) }
   .btn.loc { background:var(--navy) } .btn.loc.sec2 { background:#fff; color:var(--navy); border:2px solid var(--navy) }
+  .btn.res { background:#5d4037 } .btn.res.sec2 { background:#fff; color:#5d4037; border:2px solid #5d4037 }
+  .passos { display:flex; gap:4px; margin:4px 16px 0; font-size:11px; text-align:center }
+  .passos span { flex:1; padding:6px 2px; border-radius:6px; background:#e3e7ee; color:#666 }
+  .passos span.at { background:var(--navy); color:#fff; font-weight:bold } .passos span.ok { background:#dbe8d6; color:#2e5e2a }
+  details.mais { margin:4px 16px 12px } details.mais summary { color:var(--navy); font-size:14px; cursor:pointer; padding:6px 0 }
+  details.mais .btn { margin:10px 0 }
+  .sub { font-size:13px; font-weight:bold; color:#555; margin:18px 16px 0; text-transform:uppercase; letter-spacing:.5px }
   .off { display:block; text-align:center; color:#777; border:1px dashed #aaa; border-radius:8px; padding:13px; margin:12px 16px }
   .blq { background:var(--red); color:#fff; font-weight:bold; text-align:center; padding:14px; margin:16px; border-radius:10px; font-size:18px }
   .blq small, .atn small { display:block; font-weight:normal; font-size:13px; margin-top:6px }
@@ -110,17 +117,34 @@ async function main() {
     html += '<div class="row"><b>Último checklist:</b> ' + esc(ult.data) + ' – <span class="' + cls + '">' + esc(ult.res) + '</span></div>';
   }
   html += '</div>';
-  if (verm) html += '<div class="blq">' + esc(ult.res) + (ult.nc ? '<small>' + esc(ult.nc) + '</small>' : '') + '</div>';
+  if (/^Em manuten/.test(g('Modalidade'))) html += '<div class="blq">EM MANUTENÇÃO – NÃO LOCAR<small>Aguardando a liberação da mecânica.</small></div>';
+  else if (verm) html += '<div class="blq">' + esc(ult.res) + (ult.nc ? '<small>' + esc(ult.nc) + '</small>' : '') + '</div>';
   else if (amar) html += '<div class="atn">' + esc(ult.res) + (ult.nc ? '<small>' + esc(ult.nc) + '</small>' : '') + '<small>O responsável da área foi avisado e vai avaliar.</small></div>';
   if (pt) html += '<a class="btn" href="' + esc(pt) + '">EMITIR PERMISSÃO DE TRABALHO (NR-10)</a>';
   if (chk) html += '<a class="btn sec" href="' + esc(chk) + '">CHECKLIST DE INSPEÇÃO</a>';
   if (!pt && !chk) html += '<span class="off">Checklist online – em implantação</span>';
-  // frota de locação: entrega e devolução (a situação de uso muda a cada entrega, sem trocar a etiqueta)
-  const ent = ehLink(g('Link entrega')) ? g('Link entrega') : '', dev = ehLink(g('Link devolução')) ? g('Link devolução') : '';
-  if (ent || dev) {
-    const loc = /^(Locado|De terceiro)/.test(g('Modalidade'));
-    if (ent) html += '<a class="btn loc' + (loc ? ' sec2' : '') + '" href="' + esc(ent) + '">ENTREGA AO LOCATÁRIO</a>';
-    if (dev) html += '<a class="btn loc' + (loc ? '' : ' sec2') + '" href="' + esc(dev) + '">DEVOLUÇÃO DO EQUIPAMENTO</a>';
+  // frota de locação: ciclo entrega → retirada → coleta → chegada ao pátio → liberação (a etapa atual vem da situação de uso)
+  const L = n => ehLink(g(n)) ? g(n) : '';
+  const etapas = [
+    ['ENTREGA', 'ENTREGA AO LOCATÁRIO', L('Link entrega')],
+    ['RETIRADA', 'PEDIR RETIRADA (FIM DA LOCAÇÃO)', L('Link retirada')],
+    ['COLETA', 'COLETA – MOTORISTA', L('Link coleta')],
+    ['CHEGADA', 'CHEGADA AO PÁTIO – DEVOLUÇÃO', L('Link devolução')],
+    ['LIBERAÇÃO', 'LIBERAR PARA NOVA LOCAÇÃO', L('Link liberação')]];
+  if (etapas.some(e => e[2])) {
+    const uso = g('Modalidade');
+    const at = /^(Locado|De terceiro)/.test(uso) ? 1 : /^Retirada/.test(uso) ? 2 : /^Em trânsito/.test(uso) ? 3 : /^Em manuten/.test(uso) ? 4 : 0;
+    html += '<p class="sub">Locação</p><div class="passos">' + etapas.map((e, i) => '<span class="' + (i === at ? 'at' : (i < at ? 'ok' : '')) + '">' + e[0] + '</span>').join('') + '</div>';
+    if (etapas[at][2]) html += '<a class="btn loc" href="' + esc(etapas[at][2]) + '">' + etapas[at][1] + '</a>';
+    const outras = etapas.filter((e, i) => i !== at && e[2]);
+    if (outras.length) html += '<details class="mais"><summary>Outras etapas</summary>' + outras.map(e => '<a class="btn loc sec2" href="' + esc(e[2]) + '">' + e[1] + '</a>').join('') + '</details>';
+  }
+  // resíduos (logística reversa – PNRS)
+  const res = L('Link resíduo'), resd = L('Link destinação de resíduos');
+  if (res || resd) {
+    html += '<p class="sub">Resíduos</p>';
+    if (resd) html += '<a class="btn res" href="' + esc(resd) + '">COLETA / DESTINAÇÃO (MTR E CDF)</a>';
+    if (res) html += '<a class="btn res' + (resd ? ' sec2' : '') + '" href="' + esc(res) + '">REGISTRAR RESÍDUO (ÓLEO, FILTRO, BATERIA, PNEU)</a>';
   }
   app.innerHTML = html;
   document.title = g('Código') + ' – MaqCheck';
