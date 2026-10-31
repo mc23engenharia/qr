@@ -66,10 +66,12 @@
   .foot { font-size:11px; color:#8a93a0; text-align:center; margin:18px }
   .load { text-align:center; color:#666; margin:48px 16px }
   video#cam { width:100%; border-radius:12px; background:#000 }
+  .aj p, .aj li { font-size:16px; line-height:1.45; color:#333 } .aj ol, .aj ul { padding-left:20px; margin:6px 0 } .aj li { margin:6px 0 }
+  #quem { max-width:38vw }
 </style>
 </head>
 <body>
-<div class="top"><div class="marca"><img src="/icon.svg" alt=""><div>MaqCheck<small>MC23 Engenharia · SST</small></div></div><button class="chip" id="quem" hidden></button></div>
+<div class="top"><div class="marca"><img src="/icon.svg" alt=""><div>MaqCheck<small>MC23 Engenharia · SST</small></div></div><div style="display:flex;gap:6px;align-items:center"><button class="chip" id="quem" hidden></button><button class="chip" id="ajbt" aria-label="Ajuda">? Ajuda</button></div></div>
 <main id="app"><p class="load">Carregando…</p></main>
 <div class="foot">MC23 Engenharia · <a href="https://www.mc23.com.br" style="color:#8a93a0">www.mc23.com.br</a></div>
 <script>
@@ -136,12 +138,12 @@ function vaiPara(cli, cod) { history.pushState(null, '', '/?c=' + encodeURICompo
 window.addEventListener('popstate', () => { const p = new URLSearchParams(location.search); CLI = (p.get('c') || '').toUpperCase(); COD = (p.get('a') || '').toUpperCase(); rota(); });
 
 /* ----- Início (app aberto pela tela inicial) ----- */
-function inicio() {
+function inicio() { TELA = 'inicio';
   const rec = ls.get('mq_recentes', []), s = sessao();
   app.innerHTML = bannerFila() +
     '<div class="card"><h2 style="margin:0 0 6px">Escaneie o QR do equipamento</h2><p class="row" style="margin:0">Use a câmera do celular na etiqueta MaqCheck. ' + (s ? 'Você está como <b>' + esc(s.nome) + '</b>.' : '') + '</p></div>' +
     ('BarcodeDetector' in window ? '<button class="btn nav" id="ler">LER QR AGORA</button>' : '') +
-    '<button class="btn out" id="painel">' + (gestor() ? 'AVISOS ABERTOS – DECIDIR' : 'SOU ENCARREGADO / SST') + '</button>' +
+    '<button class="btn out" id="painel">' + (gestor() ? (s.perfil === 'Diretor' ? 'PAINEL DA EMPRESA' : 'AVISOS ABERTOS – DECIDIR') : 'SOU SUPERVISOR / SST / GESTOR') + '</button>' +
     '<div class="card"><label class="f" style="margin-top:0">Ou digite o código da etiqueta</label>' +
     '<div style="display:flex;gap:8px"><input class="t" id="cli" placeholder="Empresa" value="' + esc(CLI || (s && s.cli) || '') + '" style="width:34%;text-transform:uppercase">' +
     '<input class="t" id="cod" placeholder="Ex.: ZI-EMP-01" style="text-transform:uppercase"></div>' +
@@ -176,7 +178,7 @@ async function lerQR() {
 }
 
 /* ----- Ficha do equipamento ----- */
-async function ficha() {
+async function ficha() { TELA = 'ficha';
   app.innerHTML = '<p class="load">Carregando a ficha do equipamento…</p>';
   let ativos, status = [];
   try { ativos = await pega(CSV_ATIVOS); ls.set('mq_csv_' + CLI, ativos); }
@@ -226,12 +228,12 @@ async function ficha() {
   app.innerHTML = html; document.title = g('Código') + ' – MaqCheck';
   const b = document.getElementById('fazer'); if (b) b.onclick = () => sessao() ? checklist() : login(checklist);
   app.querySelectorAll('[data-f]').forEach(x => x.onclick = () => etapa(x.dataset.f));
-  if (gestor()) { app.insertAdjacentHTML('beforeend', '<button class="btn out" id="vav">AVISOS ABERTOS – DECIDIR</button>'); document.getElementById('vav').onclick = () => avisos(COD); }
+  if (gestor()) { app.insertAdjacentHTML('beforeend', '<button class="btn out" id="vav">' + (sessao().perfil === 'Diretor' ? 'AVISOS DESTE EQUIPAMENTO' : 'AVISOS ABERTOS – DECIDIR') + '</button>'); document.getElementById('vav').onclick = () => avisos(COD); }
   enviaFila();
 }
 
 /* ----- Login ----- */
-function login(depois) {
+function login(depois) { TELA = 'login';
   app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Identificação</h2><p class="row" style="margin:0">Entre com sua matrícula e o PIN entregue pelo SST. Vale até o fim do turno neste celular.</p>' +
     '<label class="f">Empresa</label><input class="t" id="lcli" value="' + esc(CLI) + '" ' + (CLI ? 'readonly' : '') + ' style="text-transform:uppercase">' +
     '<label class="f">Matrícula</label><input class="t" id="lmat" inputmode="numeric" autocomplete="username">' +
@@ -252,7 +254,7 @@ function login(depois) {
 }
 
 /* ----- Checklist ----- */
-async function checklist() {
+async function checklist() { TELA = 'checklist';
   const s = sessao(); if (!s) return login(checklist);
   if (s.cli !== CLI) { localStorage.removeItem('mq_sessao'); return login(checklist); }
   app.innerHTML = '<p class="load">Abrindo o checklist…</p>';
@@ -318,7 +320,7 @@ function fim(enviado, msg, nc, pode) {
 }
 
 /* ----- Etapas de campo (frota e resíduos) – o app desenha o formulário do sistema ----- */
-async function etapa(tipo) {
+async function etapa(tipo) { TELA = 'etapa';
   const s = sessao();
   app.innerHTML = '<p class="load">Abrindo…</p>';
   let def = ls.get('mq_form_' + tipo, null);
@@ -379,7 +381,7 @@ function fimEtapa(enviado, msg, titulo) {
 }
 
 /* ----- Painel do encarregado / SST: avisos abertos e decisão ----- */
-async function avisos(filtro) {
+async function avisos(filtro) { TELA = 'avisos';
   const s = sessao(); if (!s) return login(() => avisos(filtro));
   app.innerHTML = '<p class="load">Buscando avisos abertos…</p>';
   const pres = filtro ? null : api({ acao: 'resumo', token: s.token }).catch(() => null);
@@ -388,12 +390,12 @@ async function avisos(filtro) {
     app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="PAINEL=false;rota()">VOLTAR</button>'; return; }
   const lista = filtro ? r.avisos.filter(a => codDe(a.ativo) === filtro) : r.avisos;
   const cor = a => /^Aguardando aval/i.test(a.status) ? 'pend' : /parado|PT/i.test(a.status) ? 'bad' : 'lib';
-  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p>' + '<button class="btn nav" id="docs" style="width:100%;margin:12px 0 0">' + (r.perfil === 'Engenheiro' ? 'MAQLAUDO – DOCUMENTOS OFICIAIS' : 'DOCUMENTOS OFICIAIS (LAUDOS)') + '</button>' + (/^(SST|Engenheiro)$/.test(r.perfil) ? '<button class="btn out" id="eqp" style="width:100%;margin:10px 0 0">EQUIPE: PINS E PERFIS</button>' : '') + (r.perfil === 'Engenheiro' ? '<button class="btn out" id="dos" style="width:100%;margin:10px 0 0">DOSSIÊ DE EVIDÊNCIAS (PDF)</button>' : '') + '</div>' +
+  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p>' + '<button class="btn nav" id="docs" style="width:100%;margin:12px 0 0">' + (r.perfil === 'Engenheiro' ? 'MAQLAUDO – DOCUMENTOS OFICIAIS' : 'DOCUMENTOS OFICIAIS (LAUDOS)') + '</button>' + (/^(Técnico SST|Coordenador SST|Engenheiro)$/.test(r.perfil) ? '<button class="btn out" id="eqp" style="width:100%;margin:10px 0 0">EQUIPE: PINS E PERFIS</button>' : '') + (/^(Coordenador SST|Engenheiro|Diretor)$/.test(r.perfil) ? '<button class="btn out" id="dos" style="width:100%;margin:10px 0 0">DOSSIÊ DE EVIDÊNCIAS (PDF)</button>' : '') + '</div>' +
     (lista.length ? lista.map((a, i) => '<div class="card"><div class="row" style="margin:0;display:flex;justify-content:space-between"><b>' + esc(a.n) + '</b><span class="' + cor(a) + '">' + esc(a.status) + '</span></div>' +
       '<p style="font-size:18px;font-weight:700;margin:8px 0 2px">' + esc(a.ativo) + '</p><div class="row">' + esc(a.tipo) + ' · aberto em ' + esc(a.abertura) + (a.por ? ' por ' + esc(a.por) : '') + '</div>' +
       (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info.replace(/^Operador:\s*/, '')) + '</div>' : '') +
       (a.decisao ? '<div class="row"><b>Última decisão:</b> ' + esc(a.decisao) + '</div>' : '') +
-      '<button class="btn sec" data-av="' + i + '" style="width:100%;margin:12px 0 0">DECIDIR</button></div>').join('')
+      (r.perfil === 'Diretor' ? '' : '<button class="btn sec" data-av="' + i + '" style="width:100%;margin:12px 0 0">DECIDIR</button>') + '</div>').join('')
      : '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0">Nenhum aviso aberto</h2></div>') +
     '<button class="btn out" id="avvolta">VOLTAR</button>';
   app.querySelectorAll('[data-av]').forEach(b => b.onclick = () => decidir(lista[+b.dataset.av], r.opcoes, filtro));
@@ -417,7 +419,7 @@ function abrePdf(b64, nome) {
   a.href = url; a.download = nome || 'documento.pdf'; a.target = '_blank'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 let DOCF = 'pend';
-async function docs() {
+async function docs() { TELA = 'docs';
   const s = sessao(); if (!s) return login(() => docs());
   app.innerHTML = '<div class="card"><p>Carregando documentos…</p></div>';
   let r; try { r = await api({ acao: 'docs', token: s.token }); } catch (e) { app.innerHTML = '<div class="card"><p>Sem sinal. Os documentos precisam de internet.</p></div><button class="btn out" onclick="avisos()">VOLTAR</button>'; return; }
@@ -456,7 +458,7 @@ async function docs() {
     } catch (e) { dof.textContent = 'Sem sinal. Tente de novo.'; dof.disabled = false; }
   };
 }
-function docEnviar(d) {
+function docEnviar(d) { TELA = 'docEnviar';
   const s = sessao(), hoje = new Date().toISOString().slice(0, 10);
   app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(d.id) + ' · ' + esc(d.respNome) + '</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(d.doc) + '</h2><div class="row">' + esc(d.escopo === 'Empresa' ? 'Empresa toda' : d.escopo) + '</div></div>' +
     '<div class="card"><label class="f" style="margin-top:0">PDF assinado digitalmente <span class="obr">*</span></label><input type="file" accept="application/pdf" id="epdf" class="t">' +
@@ -497,7 +499,7 @@ function cartaoHoje(r) {
     (r.residuos.length ? '<details class="mais" style="margin:4px 0 0"' + (resAl.length ? ' open' : '') + '><summary>Resíduos armazenados (' + r.residuos.length + ')</summary>' + r.residuos.map(x => '<div class="row"><b>' + esc(x.n) + '</b> ' + esc(x.residuo) + ' – ' + esc(x.qtd) + ' · <span class="' + (x.alerta ? 'bad' : 'lib') + '">' + (x.resta >= 0 ? 'faltam ' + x.resta + ' dias' : 'vencido há ' + (-x.resta) + ' dias') + '</span> (prazo interno ' + r.prazoResiduo + ' dias)</div>').join('') + '</details>' : '') +
     '</div>';
 }
-function decidir(a, opcoes, filtro) {
+function decidir(a, opcoes, filtro) { TELA = 'decidir';
   let dec = '';
   app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(a.n) + ' · ' + esc(a.tipo) + '</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(a.ativo) + '</h2>' +
     (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info.replace(/^Operador:\s*/, '')) + '</div>' : '') + '</div>' +
@@ -524,12 +526,12 @@ function decidir(a, opcoes, filtro) {
 }
 
 /* ----- Equipe (só SST): perfil e PIN de cada pessoa ----- */
-async function equipe(busca) {
+async function equipe(busca) { TELA = 'equipe';
   const s = sessao(); if (!s) return login(() => equipe());
   app.innerHTML = '<p class="load">Carregando a equipe…</p>';
   let r; try { r = await api({ acao: 'equipe', token: s.token }); } catch (e) { r = { ok: false, erro: 'Sem sinal. A equipe precisa de internet.' }; }
   if (!r.ok) { app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="avisos()">VOLTAR</button>'; return; }
-  const tag = p => p === 'SST' ? '<span class="crit" style="background:var(--navy)">SST</span>' : p === 'Encarregado' ? '<span class="crit" style="background:var(--ok)">ENCARREGADO</span>' : '';
+  const COR = { 'Supervisor': 'var(--ok)', 'Técnico SST': 'var(--navy)', 'Coordenador SST': '#5b3f86', 'Engenheiro': 'var(--acc)', 'Diretor': '#37474f' }, tag = p => COR[p] ? '<span class="crit" style="background:' + COR[p] + '">' + esc(p.toUpperCase()) + '</span>' : '';
   const desenha = f => {
     const n = (f || '').toLowerCase(), l = r.equipe.filter(x => !n || x.nome.toLowerCase().includes(n) || x.mat.includes(n));
     document.getElementById('eql').innerHTML = l.map(x => '<a href="#" data-m="' + esc(x.mat) + '"><span><b>' + esc(x.nome) + '</b>' + tag(x.perfil) + '<br><small style="color:#667">Matrícula ' + esc(x.mat) + ' · ' + esc(x.treinos || '—') + ' · PIN ' + (x.pinProprio ? 'próprio' : 'padrão') + '</small></span><span>›</span></a>').join('') || '<p class="row">Ninguém encontrado.</p>';
@@ -541,12 +543,12 @@ async function equipe(busca) {
   document.getElementById('eqv').onclick = () => avisos();
   desenha(busca);
 }
-function editaPessoa(x, busca) {
+function editaPessoa(x, busca) { TELA = 'equipe';
   let perfil = x.perfil;
-  const P = ['Operador', 'Encarregado', 'SST'];
+  const alto = /^(Coordenador SST|Engenheiro)$/.test(sessao().perfil), P = alto ? ['Operador', 'Supervisor', 'Técnico SST', 'Coordenador SST', 'Engenheiro', 'Diretor'] : ['Operador', 'Supervisor', 'Técnico SST'];
   app.innerHTML = '<div class="card"><p class="row" style="margin:0">Matrícula ' + esc(x.mat) + '</p><h2 style="margin:6px 0 2px;font-size:20px">' + esc(x.nome) + '</h2><div class="row">Treinamentos: ' + esc(x.treinos || '—') + '</div></div>' +
-    '<div class="card"><label class="f" style="margin-top:0">Perfil no app</label><div class="seg" id="pf">' + P.map(p => '<button class="s-x' + (p === perfil ? ' on' : '') + '" data-p="' + p + '">' + p + '</button>').join('') + '</div>' +
-    '<p class="row" style="font-size:12px">Operador: checklists e etapas. Encarregado: também decide os avisos. SST: também gerencia a equipe.</p>' +
+    '<div class="card"><label class="f" style="margin-top:0">Perfil no app</label><div class="opc" id="pf">' + P.map(p => '<button class="' + (p === perfil ? 'on' : '') + '" data-p="' + p + '">' + p + '</button>').join('') + '</div>' +
+    '<p class="row" style="font-size:12px">Todos fazem checklists e etapas. Supervisor: também decide os avisos. Técnico SST: também gerencia a equipe. Coordenador SST: tudo, inclusive dar qualquer perfil e gerar o dossiê. Diretor: vê tudo, sem alterar.</p>' +
     '<label class="f">PIN novo (4 a 8 números) – deixe vazio para manter</label><input class="t" id="pn" inputmode="numeric" maxlength="8" autocomplete="off">' +
     '<p class="row" style="font-size:12px">PIN atual: ' + (x.pinProprio ? 'próprio (definido pelo SST)' : 'padrão – 4 últimos dígitos da matrícula') + '.</p>' +
     (x.pinProprio ? '<button class="btn out" id="pdef" style="width:100%;margin:6px 0 0">VOLTAR AO PIN PADRÃO</button>' : '') +
@@ -568,6 +570,89 @@ function editaPessoa(x, busca) {
   document.getElementById('psv').onclick = () => salva(document.getElementById('pn').value.trim());
   const pd = document.getElementById('pdef'); if (pd) pd.onclick = () => salva('PADRAO');
 }
+
+/* ===== Ajuda: botão "?" em todas as telas, assunto da tela atual, busca e "Foi útil?" ===== */
+let TELA = 'inicio';
+const PN = p => p === 'SST' ? 'Técnico SST' : p === 'Encarregado' ? 'Supervisor' : (p || 'Operador');
+const GEST = ['Supervisor', 'Técnico SST', 'Coordenador SST', 'Engenheiro', 'Diretor'], DEC = ['Supervisor', 'Técnico SST', 'Coordenador SST', 'Engenheiro'], EQP = ['Técnico SST', 'Coordenador SST', 'Engenheiro'];
+const MAN = { Operador: 'MAN-MQ-01', Supervisor: 'MAN-MQ-02', 'Técnico SST': 'MAN-MQ-03', 'Coordenador SST': 'MAN-MQ-04', Engenheiro: 'MAN-MQ-05', Diretor: 'MAN-MQ-06' };
+const AJ = [
+  { id: 'abrir', t: 'Abrir o MaqCheck e colocar na tela do celular', telas: ['inicio'], c: '<p>Aponte a câmera do celular para a etiqueta QR do equipamento ou abra <b>q.mc23.com.br</b>.</p><ol><li><b>Android (Chrome):</b> menu ⋮ → <i>Adicionar à tela inicial</i>.</li><li><b>iPhone (Safari):</b> Compartilhar → <i>Adicionar à Tela de Início</i>.</li></ol><p>O ícone do MaqCheck fica na tela como um aplicativo.</p>' },
+  { id: 'login', t: 'Entrar com matrícula e PIN', telas: ['login', 'inicio'], c: '<ol><li>Digite a <b>matrícula</b>.</li><li>Digite o <b>PIN</b>: o padrão são os 4 últimos dígitos da matrícula, a não ser que o SST tenha criado um PIN pessoal.</li><li>Toque em <b>ENTRAR</b>. Vale até o fim do turno neste celular.</li></ol><p>Para sair, toque no seu nome no alto da tela. O PIN é pessoal: não empreste.</p>' },
+  { id: 'pin', t: 'Esqueci o PIN ou a matrícula foi bloqueada', telas: ['login'], c: '<p>Peça ao técnico de segurança para voltar ao <b>PIN padrão</b> (4 últimos dígitos da matrícula) ou criar um novo. Depois de várias tentativas erradas a matrícula fica bloqueada por um tempo; quando o SST salva um PIN novo, o bloqueio é liberado.</p>' },
+  { id: 'ficha', t: 'Entender a ficha do equipamento e as cores', telas: ['ficha'], c: '<p>A ficha mostra código, descrição, NR, local, responsável, operadores habilitados e o <b>último checklist</b>.</p><ul><li><b style="color:#2e7d32">Verde</b>: liberado.</li><li><b style="color:#9c6500">Amarelo</b>: atenção – o responsável foi avisado.</li><li><b style="color:#c00000">Vermelho</b>: parado, bloqueado ou em manutenção – <b>não opere</b>.</li></ul><p>Se aparecer “nenhum com treinamento válido”, avise o supervisor antes de operar.</p>' },
+  { id: 'parado', t: 'O equipamento está PARADO ou BLOQUEADO', telas: ['ficha'], c: '<p>Não opere. A faixa vermelha mostra o motivo. Aguarde o supervisor ou o SST decidir o aviso e liberar. Se precisar muito do equipamento, fale com o responsável da área – nunca use outro equipamento sem checklist.</p>' },
+  { id: 'naoachou', t: 'Equipamento não encontrado ou sem etiqueta', telas: ['ficha', 'inicio'], c: '<p>Digite a empresa e o código na tela inicial e toque em <b>ABRIR</b>. Se mesmo assim não aparecer, avise o técnico de segurança: o equipamento pode não estar cadastrado ou a etiqueta está errada ou danificada.</p>' },
+  { id: 'checklist', t: 'Fazer o checklist antes de usar', telas: ['ficha', 'checklist'], c: '<ol><li>Na ficha, toque em <b>FAZER CHECKLIST</b>.</li><li>Responda todos os itens: <b>OK</b>, <b>NC</b> (não conforme) ou <b>N/A</b>. Itens <b style="color:#c00000">CRÍTICO</b> afetam diretamente a segurança.</li><li>Informe o horímetro, se tiver.</li><li>Responda se o equipamento pode operar agora.</li><li>Toque em <b>ENVIAR CHECKLIST</b>.</li></ol>' },
+  { id: 'nc', t: 'Marquei NC (não conforme): e agora?', telas: ['checklist'], c: '<p>Descreva o problema em <b>Observações</b> ou tire uma <b>foto</b> (até 4) – sem isso o envio não é aceito. Ao enviar, o responsável da área recebe um aviso.</p><ul><li><b>Opere com atenção</b>: o problema não impede o uso.</li><li><b>NÃO OPERE</b>: deixe parado e aguarde o responsável.</li></ul>' },
+  { id: 'horimetro', t: 'Horímetro menor que o anterior', telas: ['checklist', 'etapa'], c: '<p>O app avisa quando o número é menor que o último registrado. Confira o painel do equipamento. Só toque em <b>ENVIAR MESMO ASSIM</b> se o horímetro ou o painel foram trocados.</p>' },
+  { id: 'semsinal', t: 'Estou sem sinal de internet', telas: ['checklist', 'etapa', 'inicio', 'ficha'], c: '<p>O checklist e os registros de campo ficam <b>guardados no celular</b> e são enviados sozinhos quando a internet voltar – não precisa refazer. A faixa amarela mostra quantos estão aguardando.</p><p>O login (uma vez por turno), o painel de avisos e os documentos precisam de internet.</p>' },
+  { id: 'residuo', t: 'Registrar resíduo (óleo, filtro, estopa, bateria, pneu)', telas: ['ficha', 'etapa'], c: '<ol><li>Na ficha, toque em <b>REGISTRAR RESÍDUO</b>.</li><li>Escolha o resíduo, informe a quantidade e onde ficou armazenado.</li><li>Tire foto se puder e toque em <b>ENVIAR</b>.</li></ol><p>O SST acompanha o prazo de destinação.</p>' },
+  { id: 'destinacao', t: 'Coleta e destinação de resíduos (MTR e CDF)', telas: ['ficha', 'etapa', 'avisos'], p: GEST, c: '<p>Na coleta, use <b>COLETA / DESTINAÇÃO (MTR E CDF)</b> na ficha e informe o nº do MTR. Quando chegar o CDF do destinador, registre para encerrar. O cartão “Hoje” mostra os resíduos perto do prazo interno.</p>' },
+  { id: 'pt', t: 'Permissão de Trabalho em eletricidade (NR-10)', telas: ['ficha'], c: '<p>Nos quadros elétricos aparece <b>EMITIR PERMISSÃO DE TRABALHO (NR-10)</b>. Só pessoas <b>autorizadas em NR-10</b> podem emitir a PT e intervir no quadro.</p>' },
+  { id: 'locacao', t: 'Etapas de locação (entrega, retirada, devolução)', telas: ['ficha', 'etapa'], c: '<p>A etapa atual aparece em azul. Faça a etapa indicada quando for a sua tarefa; as outras ficam em <b>Outras etapas</b>.</p>' },
+  { id: 'painel', t: 'Ler o cartão “Hoje”', telas: ['avisos'], p: GEST, c: '<ul><li><b>Checklists 9/11</b>: equipamentos em uso já conferidos hoje (no pátio ou em manutenção não entram).</li><li><b>Avisos abertos</b>: aguardando decisão.</li><li><b>Resíduos vencendo</b>: perto do prazo de destinação.</li></ul><p>Abra “Sem checklist hoje” para cobrar quem falta.</p>' },
+  { id: 'decidir', t: 'Decidir um aviso', telas: ['avisos', 'decidir'], p: DEC, c: '<ol><li>Toque em <b>DECIDIR</b> no aviso (os de equipamento parado primeiro).</li><li>Escolha a decisão.</li><li>Informe o nº da OS ou PT, ou descreva a providência – obrigatório quando não for liberar.</li><li>Toque em <b>REGISTRAR DECISÃO</b>.</li></ol>' },
+  { id: 'opcoes', t: 'Qual decisão escolher', telas: ['decidir'], p: DEC, c: '<ul><li><b>Liberar a operação</b>: resolvido ou sem risco.</li><li><b>OS – equipamento parado</b>: há risco; fica bloqueado até o reparo.</li><li><b>OS – pode operar com restrição</b>: o reparo pode esperar, com cuidado.</li><li><b>Exige PT</b>: a intervenção tem risco próprio (elétrica, altura, espaço confinado).</li></ul><p>Na dúvida, mantenha parado e chame o SST.</p>' },
+  { id: 'diretor', t: 'Por que não aparece o botão DECIDIR?', telas: ['avisos'], p: ['Diretor'], c: '<p>O perfil Diretor é de <b>consulta</b>: vê tudo sem alterar registros. A decisão dos avisos fica com o supervisor e o SST.</p>' },
+  { id: 'docs', t: 'Documentos oficiais (laudos) e vencimentos', telas: ['avisos', 'docs'], p: GEST, c: '<p>Mostra os documentos exigidos da empresa: <b>vigentes</b>, <b>vencendo</b>, <b>vencidos</b> e <b>não emitidos</b>. Use os filtros e toque em <b>BAIXAR PDF</b> nos assinados. Vencendo ou vencido: acione o engenheiro responsável com antecedência.</p>' },
+  { id: 'maqlaudo', t: 'MaqLaudo: minuta e envio do laudo assinado', telas: ['docs', 'docEnviar'], p: ['Engenheiro'], c: '<ol><li><b>MINUTA</b>: baixa o rascunho preenchido com os dados do sistema.</li><li>Faça a vistoria, revise e assine no gov.br (assinador.iti.br) ou com ICP-Brasil.</li><li><b>ENVIAR ASSINADO</b>: escolha o PDF e informe o nº da ART, a emissão e a validade.</li></ol><p>A ART precisa estar registrada e paga antes do início (Res. CONFEA 1.137/2023, arts. 4º e 27). Assine só o que vistoriou.</p>' },
+  { id: 'dossieoficial', t: 'Dossiê oficial (ZIP)', telas: ['docs'], p: ['Engenheiro'], c: '<p>Reúne os PDFs originais assinados, sem mesclar (para não invalidar as assinaturas), com índice e o hash SHA-256 de cada arquivo. Fica em “Documentos oficiais / Dossiê Oficial”.</p>' },
+  { id: 'dossie', t: 'Dossiê de evidências (PDF)', telas: ['avisos'], p: ['Coordenador SST', 'Engenheiro', 'Diretor'], c: '<p>Reúne os registros dos últimos 90 dias e as pendências (capítulo 10). Leva até 1 minuto, é salvo na pasta “Dossiê SST” no Google Drive e cada responsável assina o mesmo PDF digitalmente.</p>' },
+  { id: 'equipe', t: 'Trocar o perfil ou o PIN de alguém', telas: ['avisos', 'equipe'], p: EQP, c: '<ol><li>No painel, toque em <b>EQUIPE: PINS E PERFIS</b>.</li><li>Busque o nome ou a matrícula e toque na pessoa.</li><li>Escolha o perfil e, se quiser, um PIN novo (4 a 8 números) ou volte ao padrão.</li><li>Toque em <b>SALVAR</b> e entregue o PIN pessoalmente.</li></ol><p>O técnico dá até Técnico SST; os perfis Coordenador, Engenheiro e Diretor só o coordenador.</p>' },
+  { id: 'perfis', t: 'O que cada perfil pode fazer', telas: ['equipe', 'avisos'], c: '<ul><li><b>Operador</b>: checklists e registros de campo.</li><li><b>Supervisor</b>: também vê o painel e decide os avisos.</li><li><b>Técnico SST</b>: também gerencia a equipe.</li><li><b>Coordenador SST</b>: tudo, inclusive dar qualquer perfil e gerar o dossiê.</li><li><b>Engenheiro</b>: MaqLaudo e documentos oficiais com ART.</li><li><b>Diretor</b>: vê tudo, sem alterar.</li></ul>' },
+];
+function ajPerfil() { const s = sessao(); return s ? PN(s.perfil) : 'Operador'; }
+function ajPode(a) { return !a.p || a.p.indexOf(ajPerfil()) >= 0; }
+function ajFecha() { const o = document.getElementById('ajo'); if (o) o.remove(); document.body.style.overflow = ''; if (/[?&]ajuda=/.test(location.search)) history.replaceState(null, '', location.pathname + location.search.replace(/([?&])ajuda=[^&]*&?/, '$1').replace(/[?&]$/, '')); }
+function ajCaixa(html) {
+  let o = document.getElementById('ajo');
+  if (!o) { o = document.createElement('div'); o.id = 'ajo'; o.style.cssText = 'position:fixed;inset:0;z-index:50;background:var(--bg);overflow:auto'; document.body.appendChild(o); document.body.style.overflow = 'hidden'; }
+  o.innerHTML = '<div class="top"><div class="marca"><img src="/icon.svg" alt=""><div>Ajuda<small>MaqCheck · ' + esc(ajPerfil()) + '</small></div></div><button class="chip" id="ajx">✕ fechar</button></div><main>' + html + '</main>';
+  o.scrollTop = 0; document.getElementById('ajx').onclick = ajFecha;
+  return o;
+}
+function ajuda(id) {
+  if (id) return ajArtigo(id);
+  const daTela = AJ.filter(a => a.telas.indexOf(TELA) >= 0 && ajPode(a)), outros = AJ.filter(a => daTela.indexOf(a) < 0 && ajPode(a));
+  const lista = l => l.map(a => '<a href="#" data-aj="' + a.id + '"><span>' + esc(a.t) + '</span><span>›</span></a>').join('');
+  const o = ajCaixa('<div class="card"><input class="t" id="ajb" placeholder="O que você precisa? Ex.: PIN, foto, aviso"></div><div id="ajr"></div>' +
+    (daTela.length ? '<p class="sub">Sobre esta tela</p><div class="card rec">' + lista(daTela) + '</div>' : '') +
+    '<p class="sub">Todos os assuntos</p><div class="card rec">' + lista(outros) + '</div>' +
+    '<a class="lnk" href="/manuais/' + MAN[ajPerfil()] + '.pdf" target="_blank" rel="noopener">Manual completo do seu perfil (PDF)</a>' +
+    '<button class="btn out" id="ajv">VOLTAR AO APP</button>');
+  const liga = () => o.querySelectorAll('[data-aj]').forEach(x => x.onclick = ev => { ev.preventDefault(); ajArtigo(x.dataset.aj); });
+  liga(); document.getElementById('ajv').onclick = ajFecha;
+  document.getElementById('ajb').oninput = ev => {
+    const n = ev.target.value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''), nm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const r = n.length < 2 ? [] : AJ.filter(a => ajPode(a) && nm(a.t + ' ' + a.c.replace(/<[^>]+>/g, ' ')).includes(n));
+    document.getElementById('ajr').innerHTML = n.length < 2 ? '' : r.length ? '<p class="sub">Resultados</p><div class="card rec">' + lista(r) + '</div>' : '<div class="card"><p class="row" style="margin:0">Nada encontrado. Fale com o técnico de segurança ou com a MC23 (contato@mc23.com.br).</p></div>';
+    liga();
+  };
+}
+function ajArtigo(id) {
+  const a = AJ.find(x => x.id === id); if (!a) return ajuda();
+  const votos = ls.get('mq_aj_votos', {}), ja = votos[id];
+  const o = ajCaixa('<div class="card"><h2 style="margin:0 0 10px;font-size:20px">' + esc(a.t) + '</h2><div class="aj">' + a.c + '</div></div>' +
+    '<div class="card" id="ajf">' + (ja ? '<p class="row" style="margin:0;text-align:center">Obrigado pela sua avaliação!</p>' :
+      '<p style="margin:0 0 10px;font-weight:700;text-align:center">Esta ajuda foi útil?</p><div class="seg"><button class="s-ok" data-v="sim">👍 Sim</button><button class="s-nc" data-v="nao">👎 Não</button></div>') + '</div>' +
+    '<button class="btn out" id="ajl">OUTROS ASSUNTOS</button><button class="btn nav" id="ajv">VOLTAR AO APP</button>');
+  document.getElementById('ajl').onclick = () => ajuda(); document.getElementById('ajv').onclick = ajFecha;
+  o.querySelectorAll('#ajf [data-v]').forEach(b => b.onclick = () => {
+    if (b.dataset.v === 'sim') return ajVota(a, 'sim', '');
+    document.getElementById('ajf').innerHTML = '<label class="f" style="margin-top:0">O que faltou ou não ficou claro? (opcional)</label><textarea class="t" id="ajo2" rows="3"></textarea><button class="btn sec" id="aje" style="width:100%;margin:10px 0 0">ENVIAR</button>';
+    document.getElementById('aje').onclick = () => ajVota(a, 'nao', document.getElementById('ajo2').value.trim());
+  });
+}
+function ajVota(a, voto, obs) {
+  const v = ls.get('mq_aj_votos', {}); v[a.id] = voto; ls.set('mq_aj_votos', v);
+  const s = sessao(); api({ acao: 'ajuda', token: s ? s.token : '', cli: CLI || (s && s.cli) || '', assunto: a.id, tela: TELA, voto, obs }).catch(() => {});
+  document.getElementById('ajf').innerHTML = '<p class="row" style="margin:0;text-align:center">' + (voto === 'sim' ? 'Que bom! Obrigado pela avaliação.' : 'Obrigado! Vamos melhorar esta ajuda. Se precisar agora, fale com o técnico de segurança.') + '</p>';
+}
+(() => {
+  document.getElementById('ajbt').onclick = () => ajuda();
+  const qa = new URLSearchParams(location.search).get('ajuda'); if (qa) setTimeout(() => ajuda(qa === '1' ? '' : qa), 300);
+})();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 rota();
