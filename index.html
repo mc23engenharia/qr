@@ -460,7 +460,7 @@ function docEnviar(d) {
   const s = sessao(), hoje = new Date().toISOString().slice(0, 10);
   app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(d.id) + ' · ' + esc(d.respNome) + '</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(d.doc) + '</h2><div class="row">' + esc(d.escopo === 'Empresa' ? 'Empresa toda' : d.escopo) + '</div></div>' +
     '<div class="card"><label class="f" style="margin-top:0">PDF assinado digitalmente <span class="obr">*</span></label><input type="file" accept="application/pdf" id="epdf" class="t">' +
-    '<label class="f">Nº da ART</label><input class="t" id="eart" value="' + esc(d.art || '') + '">' +
+    '<label class="f">Nº da ART <span class="obr">*</span></label><input class="t" id="eart" value="' + esc(d.art || '') + '">' +
     '<label class="f">Data de emissão <span class="obr">*</span></label><input type="date" class="t" id="eemi" value="' + hoje + '">' +
     '<label class="f">Validade' + (d.meses ? ' (deixe em branco para ' + d.meses + ' meses)' : ' <span class="obr">*</span>') + '</label><input type="date" class="t" id="eval">' +
     '<p class="row" style="font-size:12px">Assine o PDF no gov.br (assinador.iti.br) ou com certificado ICP-Brasil antes de enviar. O sistema confere a assinatura e guarda o hash do arquivo.</p><div class="erro" id="eerr"></div></div>' +
@@ -470,6 +470,7 @@ function docEnviar(d) {
     const er = document.getElementById('eerr'), f = document.getElementById('epdf').files[0], val = document.getElementById('eval').value, emi = document.getElementById('eemi').value;
     if (!f) { er.textContent = 'Escolha o PDF assinado.'; return; }
     if (f.size > 20e6) { er.textContent = 'PDF acima de 20 MB.'; return; }
+    if (!/\d{6,}/.test(document.getElementById('eart').value)) { er.textContent = 'Informe o nº da ART registrada e paga no CREA (obrigatória antes do envio).'; return; }
     if (!emi) { er.textContent = 'Informe a data de emissão.'; return; }
     if (!d.meses && !val) { er.textContent = 'Informe a validade do documento.'; return; }
     const bt = document.getElementById('eenv'); bt.disabled = true; bt.textContent = 'ENVIANDO…';
