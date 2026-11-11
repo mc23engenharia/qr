@@ -61,6 +61,8 @@
   .gl { padding:12px 0; border-top:1px solid var(--line) } .gl:first-of-type { border-top:0 } .gl p { margin:0 0 8px; font-size:15px }
   .todos { background:none; border:1.5px dashed var(--ok); color:var(--ok); font-weight:700; border-radius:10px; padding:10px; width:100%; margin:4px 0 6px; font-family:inherit; font-size:14px }
   .obr { color:var(--red) }
+  .cks .ck { display:flex; gap:10px; align-items:flex-start; padding:9px 2px; border-top:1px solid var(--line); font-size:15px } .cks .ck:first-child { border-top:0 } .cks .ck input { width:22px; height:22px; margin:1px 0 0; flex:none }
+  select.t { width:100%; font-size:18px; padding:13px 12px; border:1.5px solid var(--line); border-radius:10px; background:#fff; font-family:inherit; color:var(--ink) }
   .ok-big { text-align:center; padding:28px 18px } .ok-big .m { width:72px; height:72px; border-radius:50%; background:var(--ok); color:#fff; font-size:40px; line-height:72px; margin:0 auto 12px }
   .rec a { display:flex; justify-content:space-between; padding:12px 2px; border-top:1px solid var(--line); text-decoration:none; color:var(--ink) } .rec a:first-child { border-top:0 }
   .foot { font-size:11px; color:#8a93a0; text-align:center; margin:18px }
@@ -206,7 +208,7 @@ async function ficha() { TELA = 'ficha';
   else if (verm) html += '<div class="blq">' + esc(ult.res) + (ult.nc ? '<small>' + esc(ult.nc) + '</small>' : '') + '</div>';
   else if (amar) html += '<div class="atn">' + esc(ult.res) + (ult.nc ? '<small>' + esc(ult.nc) + '</small>' : '') + '<small>O responsável da área foi avisado e vai avaliar.</small></div>';
   const pt = ehLink(g('Link PT')) ? g('Link PT') : '', chkForm = ehLink(g('Link checklist (gerado)')) ? g('Link checklist (gerado)') : '';
-  if (pt) html += '<a class="btn" href="' + esc(pt) + '">EMITIR PERMISSÃO DE TRABALHO (NR-10)</a>';
+  if (pt || /NR-10/.test(g('NR'))) html += '<button class="btn" id="bpt">PERMISSÃO DE TRABALHO (NR-10)</button>';
   if (chkForm) html += '<button class="btn sec" id="fazer">FAZER CHECKLIST</button><a class="lnk" href="' + esc(chkForm) + '">Abrir no formulário (alternativa)</a>';
   else if (!pt) html += '<span class="off">Checklist online – em implantação</span>';
   const L = n => ehLink(g(n)) ? g(n) : '';
@@ -228,6 +230,7 @@ async function ficha() { TELA = 'ficha';
   }
   app.innerHTML = html; document.title = g('Código') + ' – MaqCheck';
   const b = document.getElementById('fazer'); if (b) b.onclick = () => sessao() ? checklist() : login(checklist);
+  const bpt = document.getElementById('bpt'); if (bpt) bpt.onclick = () => ptTela();
   app.querySelectorAll('[data-f]').forEach(x => x.onclick = () => etapa(x.dataset.f));
   if (gestor()) { app.insertAdjacentHTML('beforeend', '<button class="btn out" id="vav">' + (sessao().perfil === 'Diretor' ? 'AVISOS DESTE EQUIPAMENTO' : 'AVISOS ABERTOS – DECIDIR') + '</button>'); document.getElementById('vav').onclick = () => avisos(COD); }
   enviaFila();
@@ -599,6 +602,92 @@ async function executarOS() { TELA = 'os';
   };
 }
 
+/* ----- PT NR-10 no app (matrícula e PIN): emitir e encerrar pelo QR do quadro ----- */
+const ckLista = (id, itens) => '<div class="cks" id="' + id + '">' + itens.map((x, i) => '<label class="ck"><input type="checkbox" value="' + i + '"><span>' + esc(x) + '</span></label>').join('') + '</div><button class="todos" data-todos="' + id + '">MARCAR TODOS</button>';
+const ckValores = (id, itens) => [...document.querySelectorAll('#' + id + ' input:checked')].map(c => itens[+c.value]);
+function ckLigar() { document.querySelectorAll('[data-todos]').forEach(b => b.onclick = () => document.querySelectorAll('#' + b.dataset.todos + ' input').forEach(c => c.checked = true)); }
+async function ptTela() { TELA = 'pt';
+  const s = sessao(); if (!s || s.cli !== CLI) { if (s) localStorage.removeItem('mq_sessao'); return login(ptTela); }
+  app.innerHTML = '<p class="load">Abrindo a Permissão de Trabalho…</p>';
+  let d; try { d = await api({ acao: 'ptForm', token: s.token, cli: CLI, cod: COD }); } catch (e) { app.innerHTML = '<div class="card"><p>Sem sinal. A PT precisa de internet.</p></div><button class="btn out" onclick="rota()">VOLTAR</button>'; return; }
+  if (!d.ok) { if (d.semTreino) return semTreinoTela('NR-10 (autorização para PT)', null); if (d.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); return login(ptTela); }
+    app.innerHTML = '<div class="card"><p>' + esc(d.erro) + '</p></div><button class="btn out" onclick="rota()">VOLTAR</button>'; return; }
+  let html = '<div class="card"><p class="row" style="margin:0">Permissão de Trabalho · NR-10</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(d.cod + ' – ' + d.descricao) + '</h2><p class="row" style="margin:0">Você: <b>' + esc(d.nome) + '</b> (autorizado)</p></div>';
+  if (d.abertas.length) html += '<p class="sub">PT aberta nesta instalação</p>' + d.abertas.map((a, i) => '<div class="card"><div class="row" style="margin:0;display:flex;justify-content:space-between"><b>' + esc(a.pt) + '</b><span class="bad">ABERTA</span></div><div class="row">Emitida ' + esc(a.emissao) + ' · turno ' + esc(a.turno) + '</div><div class="row"><b>Serviço:</b> ' + esc(a.servico) + '</div><div class="row">' + esc(a.condicao) + '</div><button class="btn sec" data-enc="' + i + '" style="width:100%;margin:12px 0 0">ENCERRAR ESTA PT</button></div>').join('');
+  html += '<button class="btn" id="pnova">EMITIR NOVA PT</button><button class="btn out" id="pvolta">VOLTAR À FICHA</button>';
+  app.innerHTML = html; document.title = 'PT – ' + d.cod + ' – MaqCheck';
+  app.querySelectorAll('[data-enc]').forEach(b => b.onclick = () => ptEncerrarTela(d, d.abertas[+b.dataset.enc]));
+  document.getElementById('pnova').onclick = () => ptEmitirTela(d); document.getElementById('pvolta').onclick = rota;
+}
+function ptEmitirTela(d) { TELA = 'ptEmitir';
+  const fotos = []; let turno = '', modo = '';
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">Emitir PT · ' + esc(d.cod) + '</p><p class="row" style="margin:6px 0 0;font-size:13px">Serviço NÃO rotineiro (NR-10 10.7.2). Só comece depois de ver o número da PT nesta tela. Vale somente neste turno.</p>' +
+    '<label class="f">Serviço a executar <span class="obr">*</span></label><textarea class="t" id="pserv" rows="3"></textarea>' +
+    '<label class="f">Turno <span class="obr">*</span></label><div class="opc" id="pturno">' + d.turnos.map(x => '<button data-v="' + esc(x) + '">' + esc(x) + '</button>').join('') + '</div>' +
+    '<label class="f">Supervisor (autorizado) <span class="obr">*</span></label><select class="t" id="psup"><option value="">Escolha</option>' + d.autorizados.map(a => '<option value="' + esc(a.mat) + '">' + esc(a.mat + ' – ' + a.nome) + '</option>').join('') + '</select>' +
+    '<label class="f">Equipe (somente autorizados) <span class="obr">*</span></label><div class="cks" id="peq">' + d.autorizados.map(a => '<label class="ck"><input type="checkbox" value="' + esc(a.mat) + '"' + (a.mat === d.mat ? ' checked' : '') + '><span>' + esc(a.mat + ' – ' + a.nome) + '</span></label>').join('') + '</div>' +
+    '<label class="f">Terceiros na equipe (nome, empresa, nº da autorização)</label><input class="t" id="pterc"></div>' +
+    '<div class="card"><label class="f" style="margin-top:0">Análise de risco (10.7.3) <span class="obr">*</span></label>' + ckLista('par', d.ar) +
+    '<label class="f">Avaliação prévia no local (10.7.4) <span class="obr">*</span></label>' + ckLista('ppre', d.prev) +
+    '<label class="f">EPI e vestimenta <span class="obr">*</span></label>' + ckLista('pepi', d.epi) + '</div>' +
+    '<div class="card"><label class="f" style="margin-top:0">Condição da instalação <span class="obr">*</span></label><div class="opc" id="pmodo"><button data-v="Desenergizada">Desenergizada (7 passos)</button><button data-v="Energizada">Energizada (exceção – justificar)</button></div>' +
+    '<div id="pdesw" hidden><label class="f">Desenergização – 7 passos (10.13.1) <span class="obr">*</span></label>' + ckLista('pdes', d.des) + '</div>' +
+    '<div id="pjusw" hidden><label class="f">Justificativa técnica do serviço energizado <span class="obr">*</span></label><textarea class="t" id="pjus" rows="3" placeholder="MT/AT e SEP nunca individualmente (10.14.2)"></textarea></div>' +
+    '<label class="f">Fotos do bloqueio e da área (até 4)</label><input type="file" id="pft" accept="image/*" capture="environment" multiple><div class="fotos" id="pfts"></div><div class="erro" id="perr"></div></div>' +
+    '<button class="btn" id="penv">EMITIR PT</button><button class="btn out" id="pvt">VOLTAR</button>';
+  ckLigar();
+  const um = (id, set) => { const el = document.getElementById(id); el.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; set(b.dataset.v); el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); }; };
+  um('pturno', v => turno = v);
+  um('pmodo', v => { modo = v; document.getElementById('pdesw').hidden = v !== 'Desenergizada'; document.getElementById('pjusw').hidden = v !== 'Energizada'; });
+  document.getElementById('pft').onchange = async ev => { for (const f of [...ev.target.files].slice(0, 4 - fotos.length)) fotos.push(await reduz(f)); document.getElementById('pfts').innerHTML = fotos.map(x => '<img src="' + x + '">').join(''); };
+  document.getElementById('pvt').onclick = ptTela;
+  document.getElementById('penv').onclick = async () => {
+    const er = document.getElementById('perr'), s = sessao(), servico = document.getElementById('pserv').value.trim(), sup = document.getElementById('psup').value;
+    const equipe = [...document.querySelectorAll('#peq input:checked')].map(c => c.value), ar = ckValores('par', d.ar), prev = ckValores('ppre', d.prev), epi = ckValores('pepi', d.epi), des = ckValores('pdes', d.des), just = document.getElementById('pjus').value.trim();
+    const falta = servico.length < 5 ? 'Descreva o serviço.' : !turno ? 'Escolha o turno.' : !sup ? 'Escolha o supervisor.' : !equipe.length ? 'Escolha a equipe.' : ar.length < d.ar.length ? 'Confirme os 10 itens da análise de risco.' :
+      prev.length < d.prev.length ? 'Confirme a avaliação prévia.' : epi.length < d.epi.length ? 'Confirme EPI e vestimenta.' : !modo ? 'Escolha a condição da instalação.' :
+      (modo === 'Desenergizada' && des.length < d.des.length) ? 'Confirme os 7 passos da desenergização.' : (modo === 'Energizada' && just.length < 15) ? 'Justifique o serviço energizado.' : (modo === 'Energizada' && equipe.length < 2) ? 'Serviço energizado não pode ser feito por uma pessoa só.' : '';
+    if (falta) { er.textContent = falta; return; }
+    if (!s) return login(ptTela);
+    const bt = document.getElementById('penv'); bt.disabled = true; bt.textContent = 'EMITINDO…'; er.textContent = '';
+    try {
+      const r = await api({ acao: 'ptEmitir', token: s.token, cli: CLI, cod: COD, id: Date.now() + '-' + Math.random().toString(36).slice(2, 8), servico, turno, sup, equipe, terc: document.getElementById('pterc').value.trim(), ar, prev, epi, modo, des, just, fotos: fotos.map(b64 => ({ b64 })) });
+      if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); } er.textContent = r.erro || 'A PT não foi emitida.'; bt.disabled = false; bt.textContent = 'EMITIR PT'; return; }
+      app.innerHTML = '<div class="card ok-big"><div class="m">✓</div><p class="row" style="margin:0">Permissão de Trabalho emitida</p><p class="cod" style="margin:6px 0">' + esc(r.pt) + '</p><p class="row">' + esc(d.cod + ' – ' + d.descricao) + '</p><p class="row"><b>Válida somente neste turno (' + esc(r.turno) + ').</b></p><p class="row" style="font-size:13px">Ao terminar o serviço, leia o QR do quadro de novo e toque em ENCERRAR ESTA PT.</p></div>' +
+        '<button class="btn sec" id="pencag">ENCERRAR AGORA (SERVIÇO TERMINADO)</button><button class="btn out" id="pfi">VOLTAR À FICHA</button>';
+      document.getElementById('pencag').onclick = () => ptEncerrarTela(d, { pt: r.pt, servico, emissao: r.quando, turno: r.turno, condicao: modo });
+      document.getElementById('pfi').onclick = rota;
+    } catch (e) { er.textContent = 'Sem sinal. A PT NÃO foi emitida: tente de novo com internet.'; bt.disabled = false; bt.textContent = 'EMITIR PT'; }
+  };
+}
+function ptEncerrarTela(d, a) { TELA = 'ptEncerrar';
+  const fotos = []; let fim = '';
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">Encerrar PT · ' + esc(d.cod) + '</p><p class="cod" style="margin:6px 0">' + esc(a.pt) + '</p><div class="row"><b>Serviço:</b> ' + esc(a.servico) + '</div></div>' +
+    '<div class="card"><label class="f" style="margin-top:0">Reenergização – 7 passos (10.13.2) <span class="obr">*</span></label>' + ckLista('pree', d.ree) +
+    '<label class="f">Área liberada e quadro fechado? <span class="obr">*</span></label><div class="opc" id="pfim"><button data-v="Sim">Sim</button><button data-v="Não">Não – explicar nas observações</button></div>' +
+    '<label class="f">Observações</label><textarea class="t" id="pobs" rows="3"></textarea>' +
+    '<label class="f">Fotos do encerramento (até 4)</label><input type="file" id="peft" accept="image/*" capture="environment" multiple><div class="fotos" id="pefts"></div><div class="erro" id="peerr"></div></div>' +
+    '<button class="btn sec" id="peenv">ENCERRAR PT</button><button class="btn out" id="pevt">VOLTAR</button>';
+  ckLigar();
+  const pf = document.getElementById('pfim'); pf.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; fim = b.dataset.v; pf.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
+  document.getElementById('peft').onchange = async ev => { for (const f of [...ev.target.files].slice(0, 4 - fotos.length)) fotos.push(await reduz(f)); document.getElementById('pefts').innerHTML = fotos.map(x => '<img src="' + x + '">').join(''); };
+  document.getElementById('pevt').onclick = ptTela;
+  document.getElementById('peenv').onclick = async () => {
+    const er = document.getElementById('peerr'), s = sessao(), ree = ckValores('pree', d.ree), obs = document.getElementById('pobs').value.trim();
+    if (ree.length < d.ree.length) { er.textContent = 'Confirme os 7 passos da reenergização.'; return; }
+    if (!fim) { er.textContent = 'Diga se a área foi liberada.'; return; }
+    if (fim === 'Não' && obs.length < 5) { er.textContent = 'Explique nas observações por que a área não foi liberada.'; return; }
+    if (!s) return login(ptTela);
+    const bt = document.getElementById('peenv'); bt.disabled = true; bt.textContent = 'ENCERRANDO…'; er.textContent = '';
+    try {
+      const r = await api({ acao: 'ptEncerrar', token: s.token, cli: CLI, pt: a.pt, ree, fim, obs, fotos: fotos.map(b64 => ({ b64 })) });
+      if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); } er.textContent = r.erro || 'Não foi possível encerrar.'; bt.disabled = false; bt.textContent = 'ENCERRAR PT'; return; }
+      app.innerHTML = '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0 0 8px">PT encerrada</h2><p class="row">' + esc(r.msg) + '</p></div><button class="btn nav" id="pfi2">VOLTAR À FICHA</button>';
+      document.getElementById('pfi2').onclick = rota;
+    } catch (e) { er.textContent = 'Sem sinal. Tente de novo quando houver internet.'; bt.disabled = false; bt.textContent = 'ENCERRAR PT'; }
+  };
+}
+
 /* ----- Equipe (só SST): perfil e PIN de cada pessoa ----- */
 async function equipe(busca) { TELA = 'equipe';
   const s = sessao(); if (!s) return login(() => equipe());
@@ -668,6 +757,7 @@ const AJ = [
   { id: 'painel', t: 'Ler o cartão “Hoje”', telas: ['avisos'], p: GEST, c: '<ul><li><b>Checklists 9/11</b>: equipamentos em uso já conferidos hoje (no pátio ou em manutenção não entram).</li><li><b>Avisos abertos</b>: aguardando decisão.</li><li><b>Resíduos vencendo</b>: perto do prazo de destinação.</li></ul><p>Abra “Sem checklist hoje” para cobrar quem falta.</p>' },
   { id: 'os', t: 'Executar uma OS (mecânico)', telas: ['os', 'avisos', 'decidir'], c: '<ol><li>Abra o <b>link da OS</b> que chegou no e-mail do aviso (ou toque em <b>EXECUTAR OS</b> no aviso).</li><li>Entre com matrícula e PIN.</li><li>Descreva o <b>serviço executado</b>, as peças e as horas, e tire fotos.</li><li>Escolha <b>Serviço concluído</b> ou <b>Ainda em andamento</b> e toque em <b>REGISTRAR NA OS</b>.</li></ol><p>Concluída a OS, o equipamento continua bloqueado até o responsável da área validar e liberar.</p>' },
   { id: 'treino', t: 'Apareceu “Você não pode operar este equipamento”', telas: ['checklist', 'ficha'], c: '<p>Seu cadastro não tem o treinamento válido exigido para esse tipo de equipamento (ex.: NR-11). O treinamento é da <b>pessoa</b>: o equipamento não fica bloqueado e pode ser usado por um operador habilitado.</p><p>Chame um operador com o treinamento em dia ou o SST. Para regularizar, o treinamento precisa estar válido na matriz de treinamentos.</p>' },
+  { id: 'pt', t: 'Permissão de Trabalho (PT NR-10)', telas: ['ficha', 'pt', 'ptEmitir', 'ptEncerrar'], c: '<ol><li>Leia o QR do quadro e toque em <b>PERMISSÃO DE TRABALHO (NR-10)</b>. Entre com matrícula e PIN.</li><li>Toque em <b>EMITIR NOVA PT</b>, preencha e confirme os itens (análise de risco, EPI, 7 passos da desenergização).</li><li>Só comece o serviço depois de ver o <b>número da PT</b> na tela. Ela vale só neste turno.</li><li>Ao terminar, leia o QR de novo e toque em <b>ENCERRAR ESTA PT</b>: 7 passos da reenergização e liberação da área.</li></ol><p>Só quem tem NR-10 válido no cadastro emite ou encerra PT.</p>' },
   { id: 'decidir', t: 'Decidir um aviso', telas: ['avisos', 'decidir'], p: DEC, c: '<ol><li>Toque em <b>DECIDIR</b> no aviso (os de equipamento parado primeiro).</li><li>Escolha a decisão.</li><li>Informe o nº da OS ou PT, ou descreva a providência – obrigatório quando não for liberar.</li><li>Toque em <b>REGISTRAR DECISÃO</b>.</li></ol>' },
   { id: 'opcoes', t: 'Qual decisão escolher', telas: ['decidir'], p: DEC, c: '<ul><li><b>Liberar a operação</b>: resolvido ou sem risco. Se o mecânico já registrou a OS, a opção aparece como <b>Liberar a operação – OS executada e validada</b>.</li><li><b>OS – equipamento parado</b>: há risco; fica bloqueado até o reparo.</li><li><b>OS – pode operar com restrição</b>: o reparo pode esperar, com cuidado.</li><li><b>Exige PT</b>: a intervenção tem risco próprio (elétrica, altura, espaço confinado).</li></ul><p>Na dúvida, mantenha parado e chame o SST.</p>' },
   { id: 'diretor', t: 'Por que não aparece o botão DECIDIR?', telas: ['avisos'], p: ['Diretor'], c: '<p>O perfil Diretor é de <b>consulta</b>: vê tudo sem alterar registros. A decisão dos avisos fica com o supervisor e o SST.</p>' },
