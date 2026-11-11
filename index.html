@@ -123,7 +123,7 @@ async function enviaFila() {
   const f = fila(); if (!f.length || !navigator.onLine) return;
   const resto = [];
   for (const item of f) {
-    try { let r = await api(item); if (r.horBaixo) { item.confirmaHor = true; r = await api(item); } if (!r.ok && !r.sair) resto.push(item); } catch (e) { resto.push(item); }
+    try { let r = await api(item); if (r.horBaixo) { item.confirmaHor = true; r = await api(item); } if (!r.ok && !r.sair && !r.semTreino) resto.push(item); } catch (e) { resto.push(item); }
   }
   ls.set('mq_fila', resto);
   const b = document.getElementById('fila'); if (b) b.outerHTML = bannerFila();
@@ -260,7 +260,9 @@ async function checklist() { TELA = 'checklist';
   if (s.cli !== CLI) { localStorage.removeItem('mq_sessao'); return login(checklist); }
   app.innerHTML = '<p class="load">Abrindo o checklist…</p>';
   let def = ls.get('mq_def_' + CLI + '_' + COD, null);
-  try { const r = await api({ acao: 'ficha', cli: CLI, cod: COD }); if (r.ok) { def = r; ls.set('mq_def_' + CLI + '_' + COD, r); } } catch (e) {}
+  let semTreino = '';
+  try { const r = await api({ acao: 'ficha', cli: CLI, cod: COD, token: s.token }); if (r.ok) { semTreino = r.semTreino || ''; def = r; ls.set('mq_def_' + CLI + '_' + COD, Object.assign({}, r, { semTreino: '' })); } } catch (e) {}
+  if (semTreino) { semTreinoTela(semTreino, def); return; }
   if (!def || !def.checklist) { app.innerHTML = '<div class="card"><p>Checklist indisponível agora' + (def ? ' para este equipamento' : ' (sem sinal)') + '.</p></div><button class="btn out" onclick="rota()">VOLTAR</button>'; return; }
   const c = def.checklist, resp = c.itens.map(() => ''), fotos = []; let pode = '';
   let html = '<div class="card"><p class="row" style="margin:0">' + esc(def.ativo.codigo) + ' · ' + esc(def.ativo.descricao) + '</p><h2 style="margin:6px 0 2px;font-size:20px">' + esc(c.nome) + '</h2>' +
@@ -298,10 +300,17 @@ async function checklist() { TELA = 'checklist';
     try {
       const r = await api(dados);
       if (r.horBaixo) { bt.dataset.conf = '1'; er.textContent = r.erro; bt.disabled = false; bt.textContent = 'ENVIAR MESMO ASSIM'; return; }
-      if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); } er.textContent = r.erro || 'Não foi possível enviar.'; bt.disabled = false; bt.textContent = 'ENVIAR CHECKLIST'; return; }
+      if (!r.ok) { if (r.semTreino) return semTreinoTela(r.semTreino, def); if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); } er.textContent = r.erro || 'Não foi possível enviar.'; bt.disabled = false; bt.textContent = 'ENVIAR CHECKLIST'; return; }
       fim(true, r.msg || 'Checklist enviado.', nc, pode);
     } catch (e) { const f = fila(); f.push(dados); ls.set('mq_fila', f); fim(false, 'Sem sinal: o checklist ficou guardado no celular e será enviado sozinho quando houver internet.', nc, pode); }
   };
+}
+function semTreinoTela(ex, def) { TELA = 'checklist';
+  app.innerHTML = '<div class="blq">VOCÊ NÃO PODE OPERAR ESTE EQUIPAMENTO<small>Seu cadastro não tem o treinamento válido ' + esc(ex) + ' exigido' + (def && def.ativo ? ' para ' + esc(def.ativo.codigo) + ' – ' + esc(def.ativo.descricao) : '') + '. O checklist só pode ser feito por um operador habilitado.</small></div>' +
+    '<div class="card"><p class="row" style="margin:0">Chame um operador com o treinamento em dia ou o SST. O equipamento continua disponível para quem tem o treinamento.</p></div>' +
+    '<button class="btn nav" id="stv">VOLTAR À FICHA</button><button class="btn out" id="sts">TROCAR DE OPERADOR</button>';
+  document.getElementById('stv').onclick = rota;
+  document.getElementById('sts').onclick = () => { localStorage.removeItem('mq_sessao'); mostraQuem(); login(checklist); };
 }
 function reduz(file) {
   return new Promise(ok => {
@@ -658,6 +667,7 @@ const AJ = [
   { id: 'locacao', t: 'Etapas de locação (entrega, retirada, devolução)', telas: ['ficha', 'etapa'], c: '<p>A etapa atual aparece em azul. Faça a etapa indicada quando for a sua tarefa; as outras ficam em <b>Outras etapas</b>.</p>' },
   { id: 'painel', t: 'Ler o cartão “Hoje”', telas: ['avisos'], p: GEST, c: '<ul><li><b>Checklists 9/11</b>: equipamentos em uso já conferidos hoje (no pátio ou em manutenção não entram).</li><li><b>Avisos abertos</b>: aguardando decisão.</li><li><b>Resíduos vencendo</b>: perto do prazo de destinação.</li></ul><p>Abra “Sem checklist hoje” para cobrar quem falta.</p>' },
   { id: 'os', t: 'Executar uma OS (mecânico)', telas: ['os', 'avisos', 'decidir'], c: '<ol><li>Abra o <b>link da OS</b> que chegou no e-mail do aviso (ou toque em <b>EXECUTAR OS</b> no aviso).</li><li>Entre com matrícula e PIN.</li><li>Descreva o <b>serviço executado</b>, as peças e as horas, e tire fotos.</li><li>Escolha <b>Serviço concluído</b> ou <b>Ainda em andamento</b> e toque em <b>REGISTRAR NA OS</b>.</li></ol><p>Concluída a OS, o equipamento continua bloqueado até o responsável da área validar e liberar.</p>' },
+  { id: 'treino', t: 'Apareceu “Você não pode operar este equipamento”', telas: ['checklist', 'ficha'], c: '<p>Seu cadastro não tem o treinamento válido exigido para esse tipo de equipamento (ex.: NR-11). O treinamento é da <b>pessoa</b>: o equipamento não fica bloqueado e pode ser usado por um operador habilitado.</p><p>Chame um operador com o treinamento em dia ou o SST. Para regularizar, o treinamento precisa estar válido na matriz de treinamentos.</p>' },
   { id: 'decidir', t: 'Decidir um aviso', telas: ['avisos', 'decidir'], p: DEC, c: '<ol><li>Toque em <b>DECIDIR</b> no aviso (os de equipamento parado primeiro).</li><li>Escolha a decisão.</li><li>Informe o nº da OS ou PT, ou descreva a providência – obrigatório quando não for liberar.</li><li>Toque em <b>REGISTRAR DECISÃO</b>.</li></ol>' },
   { id: 'opcoes', t: 'Qual decisão escolher', telas: ['decidir'], p: DEC, c: '<ul><li><b>Liberar a operação</b>: resolvido ou sem risco. Se o mecânico já registrou a OS, a opção aparece como <b>Liberar a operação – OS executada e validada</b>.</li><li><b>OS – equipamento parado</b>: há risco; fica bloqueado até o reparo.</li><li><b>OS – pode operar com restrição</b>: o reparo pode esperar, com cuidado.</li><li><b>Exige PT</b>: a intervenção tem risco próprio (elétrica, altura, espaço confinado).</li></ul><p>Na dúvida, mantenha parado e chame o SST.</p>' },
   { id: 'diretor', t: 'Por que não aparece o botão DECIDIR?', telas: ['avisos'], p: ['Diretor'], c: '<p>O perfil Diretor é de <b>consulta</b>: vê tudo sem alterar registros. A decisão dos avisos fica com o supervisor e o SST.</p>' },
