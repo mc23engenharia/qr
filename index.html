@@ -358,7 +358,7 @@ async function etapa(tipo) { TELA = 'etapa';
   app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(COD) + '</p><h2 style="margin:6px 0 2px;font-size:20px">' + esc(def.titulo) + '</h2>' +
     (s ? '<p class="row" style="margin:2px 0 0">Responsável: <b>' + esc(s.nome) + '</b></p>' : '') + '</div>' +
     '<div class="card">' + def.itens.map(campo).join('') +
-    '<label class="f">Fotos (até 4)</label><input type="file" id="ft" accept="image/*" capture="environment" multiple><div class="fotos" id="fts"></div><div class="erro" id="eerr"></div></div>' +
+    '<label class="f">' + (tipo === 'RESD' ? 'Foto do MTR / CDF (até 4)' : 'Fotos (até 4)') + '</label><input type="file" id="ft" accept="image/*" capture="environment" multiple><div class="fotos" id="fts"></div><div class="erro" id="eerr"></div></div>' +
     '<button class="btn sec" id="env">ENVIAR</button>' + alt + '<button class="btn out" id="evolta">CANCELAR</button>';
   app.querySelectorAll('input[data-k],textarea[data-k]').forEach(x => x.oninput = () => { v[def.itens[+x.dataset.k].id] = x.value.trim(); });
   app.querySelectorAll('.opc[data-k]').forEach(g => g.onclick = ev => {
