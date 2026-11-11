@@ -1,5 +1,5 @@
 /* MaqCheck – service worker: abre o app mesmo sem sinal (a página fica guardada; os dados vêm da rede) */
-const CACHE = 'maqcheck-v10';
+const CACHE = 'maqcheck-v11';
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/', '/manifest.webmanifest'])).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
@@ -11,4 +11,3 @@ self.addEventListener('fetch', e => {
   }
   e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
 });
-// publicação 2026-11-11 18:30 (tela Executar OS)
