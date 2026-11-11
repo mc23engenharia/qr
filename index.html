@@ -237,8 +237,8 @@ async function ficha() { TELA = 'ficha';
 function login(depois) { TELA = 'login';
   app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Identificação</h2><p class="row" style="margin:0">Entre com sua matrícula e o PIN entregue pelo SST. Vale até o fim do turno neste celular.</p>' +
     '<label class="f">Empresa</label><input class="t" id="lcli" value="' + esc(CLI) + '" ' + (CLI ? 'readonly' : '') + ' style="text-transform:uppercase">' +
-    '<label class="f">Matrícula</label><input class="t" id="lmat" inputmode="numeric" autocomplete="username">' +
-    '<label class="f">PIN (4 dígitos)</label><input class="t" id="lpin" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password">' +
+    '<label class="f">Matrícula</label><input class="t" id="lmat" inputmode="numeric" autocomplete="off" autocorrect="off" spellcheck="false">' +
+    '<label class="f">PIN (4 dígitos)</label><input class="t" id="lpin" type="text" inputmode="numeric" maxlength="8" autocomplete="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;text-security:disc">' +
     '<div class="erro" id="lerr"></div><button class="btn sec" id="lok" style="width:100%;margin:8px 0 0">ENTRAR</button></div>' +
     '<button class="btn out" id="lvolta">VOLTAR</button>';
   document.getElementById('lvolta').onclick = rota;
