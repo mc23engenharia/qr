@@ -82,7 +82,7 @@ const CSV_STATUS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT50D-kZo9oG
 
 const q = new URLSearchParams(location.search);
 let ALT = {}, PAINEL = q.get('painel') === '1';
-let CLI = (q.get('c') || '').trim().toUpperCase(), COD = (q.get('a') || '').trim().toUpperCase();
+let CLI = (q.get('c') || '').trim().toUpperCase(), COD = (q.get('a') || '').trim().toUpperCase(), OSN = (q.get('os') || '').trim().toUpperCase();
 const app = document.getElementById('app'), quem = document.getElementById('quem');
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const codDe = s => String(s || '').split(' – ')[0].trim().toUpperCase();
@@ -132,10 +132,11 @@ function bannerFila() { const n = fila().length; return n ? '<div class="banner 
 window.addEventListener('online', enviaFila);
 
 /* ===== Rotas ===== */
-function rota() { mostraQuem(); if (COD) ficha(); else if (PAINEL) avisos(); else inicio(); }
+function rota() { mostraQuem(); if (OSN) executarOS(); else if (COD) ficha(); else if (PAINEL) avisos(); else inicio(); }
 const gestor = () => { const s = sessao(); return s && s.perfil && s.perfil !== 'Operador'; };
-function vaiPara(cli, cod) { history.pushState(null, '', '/?c=' + encodeURIComponent(cli) + '&a=' + encodeURIComponent(cod)); CLI = cli; COD = cod; rota(); }
-window.addEventListener('popstate', () => { const p = new URLSearchParams(location.search); CLI = (p.get('c') || '').toUpperCase(); COD = (p.get('a') || '').toUpperCase(); rota(); });
+function vaiPara(cli, cod) { history.pushState(null, '', '/?c=' + encodeURIComponent(cli) + '&a=' + encodeURIComponent(cod)); CLI = cli; COD = cod; OSN = ''; rota(); }
+function abreOS(n) { const c = CLI || (sessao() || {}).cli || ''; history.pushState(null, '', '/?c=' + encodeURIComponent(c) + '&os=' + encodeURIComponent(n)); CLI = c; OSN = n; COD = ''; PAINEL = false; rota(); }
+window.addEventListener('popstate', () => { const p = new URLSearchParams(location.search); CLI = (p.get('c') || '').toUpperCase(); COD = (p.get('a') || '').toUpperCase(); OSN = (p.get('os') || '').toUpperCase(); PAINEL = p.get('painel') === '1'; rota(); });
 
 /* ----- Início (app aberto pela tela inicial) ----- */
 function inicio() { TELA = 'inicio';
@@ -389,16 +390,19 @@ async function avisos(filtro) { TELA = 'avisos';
   if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); return login(() => avisos(filtro)); }
     app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="PAINEL=false;rota()">VOLTAR</button>'; return; }
   const lista = filtro ? r.avisos.filter(a => codDe(a.ativo) === filtro) : r.avisos;
-  const cor = a => /^Aguardando aval/i.test(a.status) ? 'pend' : /parado|PT/i.test(a.status) ? 'bad' : 'lib';
+  const cor = a => /^Aguardando aval|aguardando valida/i.test(a.status) ? 'pend' : /parado|PT/i.test(a.status) ? 'bad' : 'lib';
   app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Avisos abertos' + (filtro ? ' – ' + esc(filtro) : '') + '</h2><p class="row" style="margin:0">' + esc(s.cli) + ' · ' + esc(r.perfil) + ': <b>' + esc(s.nome) + '</b> · ' + lista.length + ' em aberto</p>' + '<button class="btn nav" id="docs" style="width:100%;margin:12px 0 0">' + (r.perfil === 'Engenheiro' ? 'MAQLAUDO – DOCUMENTOS OFICIAIS' : 'DOCUMENTOS OFICIAIS (LAUDOS)') + '</button>' + (/^(Técnico SST|Coordenador SST|Engenheiro)$/.test(r.perfil) ? '<button class="btn out" id="eqp" style="width:100%;margin:10px 0 0">EQUIPE: PINS E PERFIS</button>' : '') + (/^(Coordenador SST|Engenheiro|Diretor)$/.test(r.perfil) ? '<button class="btn out" id="dos" style="width:100%;margin:10px 0 0">DOSSIÊ DE EVIDÊNCIAS (PDF)</button>' : '') + '</div>' +
     (lista.length ? lista.map((a, i) => '<div class="card"><div class="row" style="margin:0;display:flex;justify-content:space-between"><b>' + esc(a.n) + '</b><span class="' + cor(a) + '">' + esc(a.status) + '</span></div>' +
       '<p style="font-size:18px;font-weight:700;margin:8px 0 2px">' + esc(a.ativo) + '</p><div class="row">' + esc(a.tipo) + ' · aberto em ' + esc(a.abertura) + (a.por ? ' por ' + esc(a.por) : '') + '</div>' +
       (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info.replace(/^Operador:\s*/, '')) + '</div>' : '') +
       (a.decisao ? '<div class="row"><b>Última decisão:</b> ' + esc(a.decisao) + '</div>' : '') +
+      (a.execucao ? '<div class="row"><b>Execução da OS:</b> ' + esc(osLinha(a.execucao.split('\n').pop())) + '</div>' : '') +
+      (/^Em manutenção \(/.test(a.status) ? '<button class="btn nav" data-os="' + esc(a.n) + '" style="width:100%;margin:12px 0 0">' + (r.perfil === 'Diretor' ? 'VER A OS' : 'EXECUTAR OS') + '</button>' : '') +
       (r.perfil === 'Diretor' ? '' : '<button class="btn sec" data-av="' + i + '" style="width:100%;margin:12px 0 0">DECIDIR</button>') + '</div>').join('')
      : '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0">Nenhum aviso aberto</h2></div>') +
     '<button class="btn out" id="avvolta">VOLTAR</button>';
   app.querySelectorAll('[data-av]').forEach(b => b.onclick = () => decidir(lista[+b.dataset.av], r.opcoes, filtro));
+  app.querySelectorAll('[data-os]').forEach(b => b.onclick = () => abreOS(b.dataset.os));
   const eqp = document.getElementById('eqp'); if (eqp) eqp.onclick = () => equipe(); document.getElementById('docs').onclick = () => docs();
   const dos = document.getElementById('dos'); if (dos) dos.onclick = async () => {
     dos.disabled = true; dos.textContent = 'GERANDO O DOSSIÊ… (até 1 minuto)';
@@ -502,7 +506,9 @@ function cartaoHoje(r) {
 function decidir(a, opcoes, filtro) { TELA = 'decidir';
   let dec = '';
   app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(a.n) + ' · ' + esc(a.tipo) + '</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(a.ativo) + '</h2>' +
-    (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info.replace(/^Operador:\s*/, '')) + '</div>' : '') + '</div>' +
+    (a.itens ? '<div class="row"><b>Itens:</b> ' + esc(a.itens) + '</div>' : '') + (a.info ? '<div class="row"><b>Operador:</b> ' + esc(a.info.replace(/^Operador:\s*/, '')) + '</div>' : '') +
+    (a.execucao ? '<div class="row"><b>Execução da OS:</b> ' + esc(osLinha(a.execucao.split('\n').pop())) + '</div>' : '') + '</div>' +
+    (/aguardando valida/i.test(a.status) ? '<div class="atn">OS executada pelo mecânico<small>Confira o serviço. Se estiver resolvido, escolha “Liberar a operação”.</small></div>' : '') +
     '<div class="card"><label class="f" style="margin-top:0">Decisão <span class="obr">*</span></label><div class="opc" id="dop">' + opcoes.map((o, j) => '<button data-j="' + j + '">' + esc(o) + '</button>').join('') + '</div>' +
     '<label class="f">Nº da OS de manutenção / PT (se houver)</label><input class="t" id="dnum">' +
     '<label class="f">Providência / observação</label><textarea class="t" id="dobs" rows="3" placeholder="O que foi verificado ou o que será feito"></textarea><div class="erro" id="derr"></div></div>' +
@@ -519,9 +525,68 @@ function decidir(a, opcoes, filtro) { TELA = 'decidir';
     try {
       const r = await api({ acao: 'decidir', token: s.token, av: a.n, dec, num, obs, id: Date.now() + '-' + Math.random().toString(36).slice(2, 8) });
       if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); } er.textContent = r.erro || 'Não foi possível registrar.'; bt.disabled = false; bt.textContent = 'REGISTRAR DECISÃO'; return; }
-      app.innerHTML = '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0 0 8px">Decisão registrada</h2><p class="row">' + esc(r.msg) + '</p><p class="row"><b>' + esc(dec) + '</b></p></div><button class="btn nav" id="fv">VOLTAR AOS AVISOS</button>';
+      const temOS = /equipamento parado|com restrição/.test(dec), lk = location.origin + '/?c=' + encodeURIComponent(s.cli) + '&os=' + encodeURIComponent(a.n);
+      app.innerHTML = '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0 0 8px">Decisão registrada</h2><p class="row">' + esc(r.msg) + '</p><p class="row"><b>' + esc(dec) + '</b></p>' +
+        (temOS ? '<p class="row" style="font-size:13px">O mecânico recebe por e-mail o link da OS. Se precisar, mande este link para ele:</p><p class="row" style="font-size:13px;word-break:break-all"><b>' + esc(lk) + '</b></p>' : '') + '</div>' +
+        (temOS ? '<button class="btn nav" id="fos">ABRIR A OS ' + esc(a.n) + '</button>' + (navigator.share ? '<button class="btn out" id="fsh">ENVIAR O LINK DA OS</button>' : '') : '') +
+        '<button class="btn ' + (temOS ? 'out' : 'nav') + '" id="fv">VOLTAR AOS AVISOS</button>';
       document.getElementById('fv').onclick = () => avisos(filtro);
+      if (temOS) { document.getElementById('fos').onclick = () => abreOS(a.n); const sh = document.getElementById('fsh'); if (sh) sh.onclick = () => navigator.share({ title: 'OS ' + a.n + ' – ' + a.ativo, text: 'Executar a OS ' + a.n + ' (' + a.ativo + ') no MaqCheck:', url: lk }).catch(() => {}); }
     } catch (e) { er.textContent = 'Sem sinal. Tente de novo quando houver internet.'; bt.disabled = false; bt.textContent = 'REGISTRAR DECISÃO'; }
+  };
+}
+
+/* ----- Executar OS (mecânico) – link único do aviso: /?c=EMPRESA&os=AV-AAAA-NNNN ----- */
+const osLinha = l => String(l || '').replace(/ – Fotos: .*$/, m => ' – ' + (m.match(/https:\/\//g) || []).length + ' foto(s)');
+async function executarOS() { TELA = 'os';
+  const s = sessao(); if (!s) return login(executarOS);
+  if (CLI && s.cli !== CLI) { localStorage.removeItem('mq_sessao'); mostraQuem(); return login(executarOS); }
+  app.innerHTML = '<p class="load">Abrindo a OS ' + esc(OSN) + '…</p>';
+  const sair = () => { OSN = ''; history.pushState(null, '', '/'); rota(); };
+  let r; try { r = await api({ acao: 'os', token: s.token, av: OSN }); }
+  catch (e) { app.innerHTML = '<div class="card"><p>Sem sinal. A OS precisa de internet para abrir.</p></div><button class="btn nav" id="otn">TENTAR DE NOVO</button><button class="btn out" id="ovt">INÍCIO</button>';
+    document.getElementById('otn').onclick = executarOS; document.getElementById('ovt').onclick = sair; return; }
+  if (!r.ok) { if (r.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); return login(executarOS); }
+    app.innerHTML = '<div class="card"><p class="cod">' + esc(OSN) + '</p><p>' + esc(r.erro) + '</p></div><button class="btn out" id="ovt">INÍCIO</button>'; document.getElementById('ovt').onclick = sair; return; }
+  const valid = /aguardando valida/i.test(r.status), regs = r.execucao ? r.execucao.split('\n') : [], fotos = []; let fim = '';
+  let html = '<div class="card"><p class="row" style="margin:0">Ordem de serviço · ' + esc(r.n) + '</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(r.ativo) + '</h2>' +
+    '<div class="row"><b>Situação:</b> <span class="' + (valid ? 'pend' : 'bad') + '">' + esc(r.status) + '</span></div>' +
+    (r.itens ? '<div class="row"><b>Problema (checklist):</b> ' + esc(r.itens) + '</div>' : '') +
+    (r.info ? '<div class="row"><b>Operador informou:</b> ' + esc(r.info.replace(/^Operador:\s*/, '')) + '</div>' : '') +
+    (r.decisao ? '<div class="row"><b>Decisão do responsável:</b> ' + esc(r.decisao) + '</div>' : '') +
+    '<div class="row" style="font-size:12px">Aviso aberto em ' + esc(r.abertura) + '</div></div>';
+  if (regs.length) html += '<p class="sub">Registros da execução</p><div class="card">' + regs.map(l => '<div class="row">' + esc(osLinha(l)) + '</div>').join('') + '</div>';
+  if (!r.pode) {
+    html += (r.perfil === 'Diretor' ? '' : '<div class="atn">OS não liberada para execução<small>' + (/^Encerrado/i.test(r.status) ? 'Este aviso já foi encerrado.' : 'Aguarde o responsável da área decidir o aviso (abrir OS).') + '</small></div>') +
+      '<button class="btn nav" id="ofi">VER A FICHA DO EQUIPAMENTO</button><button class="btn out" id="ovt">INÍCIO</button>';
+    app.innerHTML = html; document.getElementById('ofi').onclick = () => vaiPara(s.cli, r.cod); document.getElementById('ovt').onclick = sair; document.title = r.n + ' – MaqCheck'; return;
+  }
+  if (valid) html += '<div class="atn">Já registrada como executada<small>Aguardando o responsável validar. Registre aqui só se houver algo a acrescentar.</small></div>';
+  html += '<div class="card"><p class="row" style="margin:0">Mecânico: <b>' + esc(r.nome) + '</b></p>' +
+    '<label class="f">Serviço executado <span class="obr">*</span></label><textarea class="t" id="oserv" rows="4" placeholder="O que foi feito, o que foi testado"></textarea>' +
+    '<label class="f">Peças trocadas</label><input class="t" id="opec" placeholder="Ex.: mangueira hidráulica 1/2&quot;, 2 abraçadeiras">' +
+    '<label class="f">Horas trabalhadas</label><input class="t" id="ohor" inputmode="decimal" placeholder="Ex.: 2,5">' +
+    '<label class="f">Fotos do serviço (até 4)</label><input type="file" id="oft" accept="image/*" capture="environment" multiple><div class="fotos" id="ofts"></div>' +
+    '<label class="f">Ao terminar <span class="obr">*</span></label><div class="opc" id="ofim"><button data-v="1">Serviço concluído – pedir validação ao responsável</button><button data-v="0">Ainda em andamento – só registrar</button></div>' +
+    '<div class="erro" id="oerr"></div></div><button class="btn sec" id="oenv">REGISTRAR NA OS</button><button class="btn out" id="ofi">VER A FICHA DO EQUIPAMENTO</button>';
+  app.innerHTML = html; document.title = r.n + ' – MaqCheck';
+  document.getElementById('oft').onchange = async ev => { for (const f of [...ev.target.files].slice(0, 4 - fotos.length)) fotos.push(await reduz(f)); document.getElementById('ofts').innerHTML = fotos.map(x => '<img src="' + x + '">').join(''); };
+  const ofim = document.getElementById('ofim'); ofim.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; fim = b.dataset.v; ofim.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
+  document.getElementById('ofi').onclick = () => vaiPara(s.cli, r.cod);
+  document.getElementById('oenv').onclick = async () => {
+    const er = document.getElementById('oerr'), servico = document.getElementById('oserv').value.trim(), s2 = sessao();
+    if (servico.length < 5) { er.textContent = 'Descreva o serviço executado.'; return; }
+    if (!fim) { er.textContent = 'Diga se o serviço foi concluído ou continua em andamento.'; return; }
+    if (!s2) return login(executarOS);
+    const bt = document.getElementById('oenv'); bt.disabled = true; bt.textContent = 'REGISTRANDO…'; er.textContent = '';
+    try {
+      const x = await api({ acao: 'osExecutar', token: s2.token, av: r.n, id: Date.now() + '-' + Math.random().toString(36).slice(2, 8), servico, pecas: document.getElementById('opec').value.trim(), horas: document.getElementById('ohor').value.trim(), concluida: fim === '1', fotos: fotos.map(b64 => ({ b64 })) });
+      if (!x.ok) { if (x.sair) { localStorage.removeItem('mq_sessao'); mostraQuem(); } er.textContent = x.erro || 'Não foi possível registrar.'; bt.disabled = false; bt.textContent = 'REGISTRAR NA OS'; return; }
+      app.innerHTML = '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0 0 8px">' + (x.concluida ? 'OS executada' : 'Andamento registrado') + '</h2><p class="row">' + esc(x.msg) + '</p>' +
+        (x.concluida ? '<div class="blq" style="margin:14px 0 0">AINDA NÃO OPERE<small>O equipamento só volta a operar depois que o responsável validar e liberar.</small></div>' : '') + '</div>' +
+        '<button class="btn nav" id="ofi2">VER A FICHA DO EQUIPAMENTO</button><button class="btn out" id="ovt">INÍCIO</button>';
+      document.getElementById('ofi2').onclick = () => vaiPara(s.cli, r.cod); document.getElementById('ovt').onclick = sair;
+    } catch (e) { er.textContent = 'Sem sinal. A OS precisa de internet: tente de novo quando houver sinal (o texto continua aqui).'; bt.disabled = false; bt.textContent = 'REGISTRAR NA OS'; }
   };
 }
 
@@ -592,6 +657,7 @@ const AJ = [
   { id: 'pt', t: 'Permissão de Trabalho em eletricidade (NR-10)', telas: ['ficha'], c: '<p>Nos quadros elétricos aparece <b>EMITIR PERMISSÃO DE TRABALHO (NR-10)</b>. Só pessoas <b>autorizadas em NR-10</b> podem emitir a PT e intervir no quadro.</p>' },
   { id: 'locacao', t: 'Etapas de locação (entrega, retirada, devolução)', telas: ['ficha', 'etapa'], c: '<p>A etapa atual aparece em azul. Faça a etapa indicada quando for a sua tarefa; as outras ficam em <b>Outras etapas</b>.</p>' },
   { id: 'painel', t: 'Ler o cartão “Hoje”', telas: ['avisos'], p: GEST, c: '<ul><li><b>Checklists 9/11</b>: equipamentos em uso já conferidos hoje (no pátio ou em manutenção não entram).</li><li><b>Avisos abertos</b>: aguardando decisão.</li><li><b>Resíduos vencendo</b>: perto do prazo de destinação.</li></ul><p>Abra “Sem checklist hoje” para cobrar quem falta.</p>' },
+  { id: 'os', t: 'Executar uma OS (mecânico)', telas: ['os', 'avisos', 'decidir'], c: '<ol><li>Abra o <b>link da OS</b> que chegou no e-mail do aviso (ou toque em <b>EXECUTAR OS</b> no aviso).</li><li>Entre com matrícula e PIN.</li><li>Descreva o <b>serviço executado</b>, as peças e as horas, e tire fotos.</li><li>Escolha <b>Serviço concluído</b> ou <b>Ainda em andamento</b> e toque em <b>REGISTRAR NA OS</b>.</li></ol><p>Concluída a OS, o equipamento continua bloqueado até o responsável da área validar e liberar.</p>' },
   { id: 'decidir', t: 'Decidir um aviso', telas: ['avisos', 'decidir'], p: DEC, c: '<ol><li>Toque em <b>DECIDIR</b> no aviso (os de equipamento parado primeiro).</li><li>Escolha a decisão.</li><li>Informe o nº da OS ou PT, ou descreva a providência – obrigatório quando não for liberar.</li><li>Toque em <b>REGISTRAR DECISÃO</b>.</li></ol>' },
   { id: 'opcoes', t: 'Qual decisão escolher', telas: ['decidir'], p: DEC, c: '<ul><li><b>Liberar a operação</b>: resolvido ou sem risco.</li><li><b>OS – equipamento parado</b>: há risco; fica bloqueado até o reparo.</li><li><b>OS – pode operar com restrição</b>: o reparo pode esperar, com cuidado.</li><li><b>Exige PT</b>: a intervenção tem risco próprio (elétrica, altura, espaço confinado).</li></ul><p>Na dúvida, mantenha parado e chame o SST.</p>' },
   { id: 'diretor', t: 'Por que não aparece o botão DECIDIR?', telas: ['avisos'], p: ['Diretor'], c: '<p>O perfil Diretor é de <b>consulta</b>: vê tudo sem alterar registros. A decisão dos avisos fica com o supervisor e o SST.</p>' },
