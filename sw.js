@@ -11,3 +11,4 @@ self.addEventListener('fetch', e => {
   }
   e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
 });
+// publicação 2026-11-11 18:30 (tela Executar OS)
