@@ -521,16 +521,17 @@ function docEnviar(d) { TELA = 'docEnviar';
   };
 }
 function cartaoHoje(r) {
-  const pend = r.checklists.filter(x => !x.feito), feitos = r.checklists.filter(x => x.feito), resAl = r.residuos.filter(x => x.alerta);
+  const pend = r.checklists.filter(x => !x.feito), feitos = r.checklists.filter(x => x.feito), resAl = r.residuos.filter(x => x.alerta), tr = r.treinos || [];
   const num = (n, t, c) => '<div style="flex:1;text-align:center"><div style="font-size:26px;font-weight:800;color:' + c + '">' + n + '</div><div style="font-size:11px;color:#5b6573;text-transform:uppercase;letter-spacing:.4px">' + t + '</div></div>';
   const lnk = x => '<a href="/?c=' + encodeURIComponent(CLI || sessao().cli) + '&a=' + encodeURIComponent(x.cod) + '"><span><b>' + esc(x.cod) + '</b> ' + esc(x.desc) + (x.feito ? '<br><small style="color:#667">' + esc(x.hora) + ' · ' + esc(x.quem) + ' · <span class="' + (/^OK/.test(x.res) ? 'lib' : /^(PARADO|BLOQ|EM MANUT)/.test(x.res) ? 'bad' : 'pend') + '">' + esc(x.res) + '</span></small>' : x.local ? '<br><small style="color:#667">' + esc(x.local) + '</small>' : '') + '</span><span>›</span></a>';
   return '<div class="card"><h2 style="margin:0 0 10px">Hoje · ' + esc(r.hoje) + '</h2><div style="display:flex;gap:6px">' +
     num(r.feitos + '/' + r.checklists.length, 'checklists', r.feitos === r.checklists.length ? 'var(--ok)' : 'var(--amb)') + num(r.avisos, 'avisos abertos', r.avisos ? 'var(--red)' : 'var(--ok)') +
-    num(resAl.length, 'resíduos vencendo', resAl.length ? 'var(--red)' : 'var(--ok)') + '</div>' +
+    num(resAl.length, 'resíduos vencendo', resAl.length ? 'var(--red)' : 'var(--ok)') + num(tr.length, 'treinam. vencendo', tr.some(x => x.sit === 'vencido') ? 'var(--red)' : tr.length ? 'var(--amb)' : 'var(--ok)') + '</div>' +
     '<div class="prog" style="margin-top:12px"><i style="width:' + (r.checklists.length ? Math.round(100 * r.feitos / r.checklists.length) : 0) + '%"></i></div>' +
     '<p class="row" style="font-size:12px;margin:4px 0 0">Equipamentos com checklist diário em uso' + (r.foraDeUso ? ' (' + r.foraDeUso + ' no pátio ou em manutenção não entram)' : '') + '.</p>' +
     (pend.length ? '<details class="mais" style="margin:10px 0 0"><summary>Sem checklist hoje (' + pend.length + ')</summary><div class="rec">' + pend.map(lnk).join('') + '</div></details>' : '') +
     (feitos.length ? '<details class="mais" style="margin:4px 0 0"><summary>Feitos hoje (' + feitos.length + ')</summary><div class="rec">' + feitos.map(lnk).join('') + '</div></details>' : '') +
+    (tr.length ? '<details class="mais" style="margin:4px 0 0" open><summary>Treinamentos vencidos ou vencendo em ' + (r.avisoTreinoDias || 30) + ' dias (' + tr.length + ')</summary>' + tr.map(x => '<div class="row"><b>' + esc(x.nome) + '</b> (' + esc(x.mat) + ') · ' + esc(x.cod) + ' · <span class="' + (x.sit === 'vencido' ? 'bad' : 'pend') + '">' + (x.sit === 'vencido' ? 'vencido em ' + esc(x.ate) : 'vence em ' + esc(x.ate) + ' (' + x.dias + ' dias)') + '</span></div>').join('') + '</details>' : '') +
     (r.residuos.length ? '<details class="mais" style="margin:4px 0 0"' + (resAl.length ? ' open' : '') + '><summary>Resíduos armazenados (' + r.residuos.length + ')</summary>' + r.residuos.map(x => '<div class="row"><b>' + esc(x.n) + '</b> ' + esc(x.residuo) + ' – ' + esc(x.qtd) + ' · <span class="' + (x.alerta ? 'bad' : 'lib') + '">' + (x.resta >= 0 ? 'faltam ' + x.resta + ' dias' : 'vencido há ' + (-x.resta) + ' dias') + '</span> (prazo interno ' + r.prazoResiduo + ' dias)</div>').join('') + '</details>' : '') +
     '</div>';
 }
@@ -708,18 +709,28 @@ function ptEncerrarTela(d, a) { TELA = 'ptEncerrar';
 }
 
 /* ----- Equipe (só SST): perfil e PIN de cada pessoa ----- */
+// treinamentos com validade: verde ok, âmbar vencendo, vermelho vencido
+function trChips(x, longo) {
+  const l = x.tr || (x.treinos ? x.treinos.split(';').map(c => ({ cod: c, sit: 'ok', ate: '' })) : []);
+  if (!l.length) return '<small style="color:#667">sem treinamento cadastrado</small>';
+  const cor = { ok: '#2e7d32', vencendo: '#b26a00', vencido: '#c62828' };
+  return l.map(t => '<span style="display:inline-block;margin:3px 4px 0 0;padding:1px 7px;border-radius:9px;font-size:12px;border:1px solid ' + cor[t.sit] + ';color:' + cor[t.sit] + '">' + esc(t.cod) +
+    (t.sit === 'vencido' ? ' · vencido ' + esc(t.ate) : t.sit === 'vencendo' ? ' · vence ' + esc(t.ate) : longo && t.ate ? ' · até ' + esc(t.ate) : '') + '</span>').join('');
+}
 async function equipe(busca) { TELA = 'equipe';
   const s = sessao(); if (!s) return login(() => equipe());
   app.innerHTML = '<p class="load">Carregando a equipe…</p>';
   let r; try { r = await api({ acao: 'equipe', token: s.token }); } catch (e) { r = { ok: false, erro: 'Sem sinal. A equipe precisa de internet.' }; }
   if (!r.ok) { app.innerHTML = '<div class="card"><p>' + esc(r.erro) + '</p></div><button class="btn out" onclick="avisos()">VOLTAR</button>'; return; }
   const COR = { 'Supervisor': 'var(--ok)', 'Técnico SST': 'var(--navy)', 'Coordenador SST': '#5b3f86', 'Engenheiro': 'var(--acc)', 'Diretor': '#37474f' }, tag = p => COR[p] ? '<span class="crit" style="background:' + COR[p] + '">' + esc(p.toUpperCase()) + '</span>' : '';
+  const prob = x => (x.tr || []).filter(t => t.sit !== 'ok').length, nProb = r.equipe.filter(prob).length;
+  r.equipe.sort((a, b) => (prob(b) > 0) - (prob(a) > 0) || a.nome.localeCompare(b.nome));
   const desenha = f => {
     const n = (f || '').toLowerCase(), l = r.equipe.filter(x => !n || x.nome.toLowerCase().includes(n) || x.mat.includes(n));
-    document.getElementById('eql').innerHTML = l.map(x => '<a href="#" data-m="' + esc(x.mat) + '"><span><b>' + esc(x.nome) + '</b>' + tag(x.perfil) + '<br><small style="color:#667">Matrícula ' + esc(x.mat) + ' · ' + esc(x.treinos || '—') + ' · PIN ' + (x.pinProprio ? 'próprio' : 'padrão') + '</small></span><span>›</span></a>').join('') || '<p class="row">Ninguém encontrado.</p>';
+    document.getElementById('eql').innerHTML = l.map(x => '<a href="#" data-m="' + esc(x.mat) + '"><span><b>' + esc(x.nome) + '</b>' + tag(x.perfil) + '<br><small style="color:#667">Matrícula ' + esc(x.mat) + ' · PIN ' + (x.pinProprio ? 'próprio' : 'padrão') + '</small><br>' + trChips(x) + '</span><span>›</span></a>').join('') || '<p class="row">Ninguém encontrado.</p>';
     document.querySelectorAll('#eql [data-m]').forEach(a => a.onclick = ev => { ev.preventDefault(); editaPessoa(r.equipe.find(x => x.mat === a.dataset.m), document.getElementById('eqb').value); });
   };
-  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Equipe – ' + esc(s.cli) + '</h2><p class="row" style="margin:0">' + r.equipe.length + ' pessoas. Toque para trocar o perfil ou o PIN.</p>' +
+  app.innerHTML = '<div class="card"><h2 style="margin:0 0 4px">Equipe – ' + esc(s.cli) + '</h2><p class="row" style="margin:0">' + r.equipe.length + ' pessoas. Toque para trocar o perfil ou o PIN.</p>' + (nProb ? '<p class="row" style="margin:6px 0 0"><span class="bad">' + nProb + ' pessoa(s) com treinamento vencido ou vencendo</span> – aparecem primeiro.</p>' : '') +
     '<input class="t" id="eqb" placeholder="Buscar nome ou matrícula" style="margin-top:12px" value="' + esc(busca || '') + '"></div><div class="card rec" id="eql"></div><button class="btn out" id="eqv">VOLTAR AOS AVISOS</button>';
   document.getElementById('eqb').oninput = ev => desenha(ev.target.value);
   document.getElementById('eqv').onclick = () => avisos();
@@ -728,7 +739,7 @@ async function equipe(busca) { TELA = 'equipe';
 function editaPessoa(x, busca) { TELA = 'equipe';
   let perfil = x.perfil;
   const alto = /^(Coordenador SST|Engenheiro)$/.test(sessao().perfil), P = alto ? ['Operador', 'Supervisor', 'Técnico SST', 'Coordenador SST', 'Engenheiro', 'Diretor'] : ['Operador', 'Supervisor', 'Técnico SST'];
-  app.innerHTML = '<div class="card"><p class="row" style="margin:0">Matrícula ' + esc(x.mat) + '</p><h2 style="margin:6px 0 2px;font-size:20px">' + esc(x.nome) + '</h2><div class="row">Treinamentos: ' + esc(x.treinos || '—') + '</div></div>' +
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">Matrícula ' + esc(x.mat) + '</p><h2 style="margin:6px 0 2px;font-size:20px">' + esc(x.nome) + '</h2><div class="row">Treinamentos:</div>' + trChips(x, true) + '</div>' +
     '<div class="card"><label class="f" style="margin-top:0">Perfil no app</label><div class="opc" id="pf">' + P.map(p => '<button class="' + (p === perfil ? 'on' : '') + '" data-p="' + p + '">' + p + '</button>').join('') + '</div>' +
     '<p class="row" style="font-size:12px">Todos fazem checklists e etapas. Supervisor: também decide os avisos. Técnico SST: também gerencia a equipe. Coordenador SST: tudo, inclusive dar qualquer perfil e gerar o dossiê. Diretor: vê tudo, sem alterar.</p>' +
     '<label class="f">PIN novo (4 a 8 números) – deixe vazio para manter</label><input class="t" id="pn" inputmode="numeric" maxlength="8" autocomplete="off">' +
