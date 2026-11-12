@@ -390,6 +390,12 @@ async function etapa(tipo) { TELA = 'etapa';
     const er = document.getElementById('eerr');
     const falta = def.itens.find(it => it.obrig && (Array.isArray(v[it.id]) ? (it.tipo === 'grade' ? v[it.id].some(x => !x) : !v[it.id].length) : !v[it.id]));
     if (falta) { er.textContent = 'Falta responder: ' + falta.titulo; return; }
+    if (tipo === 'RESD') { const rv = t => { const it = def.itens.find(x => x.titulo === t); return it ? String(v[it.id] || '').trim() : ''; };
+      if (/^CDF/.test(rv('Etapa'))) {
+        if (!rv('Nº do MTR')) { er.textContent = 'Falta o Nº do MTR: toque no MTR desta coleta.'; return; }
+        if (!rv('Nº do CDF')) { er.textContent = 'Falta o Nº do CDF.'; return; }
+        if (!fotos.length && !rv('Link do MTR / CDF (Drive)')) { er.textContent = 'Anexe a foto do CDF ou o link do arquivo.'; return; }
+      } }
     const s2 = sessao(), dados = { acao: 'enviarForm', tipo, token: s2 && s2.cli === CLI ? s2.token : '', cli: CLI, cod: COD, id: Date.now() + '-' + Math.random().toString(36).slice(2, 8), respostas: v, confirmaHor: !!document.getElementById('env').dataset.conf, fotos: fotos.map(b64 => ({ b64 })) };
     const bt = document.getElementById('env'); bt.disabled = true; bt.textContent = 'ENVIANDO…';
     try {
