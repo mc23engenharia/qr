@@ -475,7 +475,7 @@ async function docs() { TELA = 'docs';
     num(cont[3], 'vigentes', 'var(--ok)') + num(cont[1], 'vencendo', cont[1] ? 'var(--amb)' : 'var(--ok)') + num(cont[0], 'vencidos', cont[0] ? 'var(--red)' : 'var(--ok)') + num(cont[2], 'não emitidos', cont[2] ? 'var(--amb)' : 'var(--ok)') + '</div>' +
     '<div class="prog" style="margin-top:10px"><i style="width:' + Math.round(100 * cont[3] / Math.max(1, r.docs.length)) + '%"></i></div>' +
     '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">' + Object.keys(filtros).filter(k => eng || k !== 'meus').map(k => '<button class="btn ' + (k === DOCF ? 'nav' : 'out') + '" data-f="' + k + '" style="flex:1;margin:0;padding:8px 4px;font-size:12px">' + filtros[k][0] + '</button>').join('') + '</div></div>' +
-    (eng ? '<button class="btn sec" id="dof">GERAR DOSSIÊ OFICIAL (ZIP)</button>' : '') +
+    (eng ? '<div class="card" id="lotes"><h2 style="margin:0 0 4px;font-size:18px">Laudo consolidado</h2><p class="row" style="margin:0">Vários documentos num único PDF: <b>uma assinatura por engenheiro</b> no gov.br.</p><p class="row" style="margin:6px 0 0;color:#667">Carregando…</p></div><button class="btn sec" id="dof">GERAR DOSSIÊ OFICIAL (ZIP)</button>' : '') +
     (lista.length ? lista.map(item).join('') : '<div class="card ok-big"><div class="m">✓</div><h2 style="margin:0">Nada nesta lista</h2></div>') + '<button class="btn out" id="dcv">VOLTAR</button>';
   app.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { DOCF = b.dataset.f; docs(); });
   document.getElementById('dcv').onclick = () => avisos();
@@ -484,6 +484,7 @@ async function docs() { TELA = 'docs';
   app.querySelectorAll('[data-min]').forEach(b => b.onclick = () => baixa(b, 'minuta', lista[+b.dataset.min]));
   app.querySelectorAll('[data-bx]').forEach(b => b.onclick = () => baixa(b, 'docBaixar', lista[+b.dataset.bx]));
   app.querySelectorAll('[data-env]').forEach(b => b.onclick = () => docEnviar(lista[+b.dataset.env]));
+  if (eng) lotesCard(s);
   const dof = document.getElementById('dof'); if (dof) dof.onclick = async () => {
     dof.disabled = true; dof.textContent = 'MONTANDO O DOSSIÊ… (até 1 minuto)';
     try { const x = await api({ acao: 'dossieOficial', token: s.token }); if (!x.ok) { dof.textContent = x.erro || 'Não foi possível.'; dof.disabled = false; return; }
@@ -493,8 +494,53 @@ async function docs() { TELA = 'docs';
     } catch (e) { dof.textContent = 'Sem sinal. Tente de novo.'; dof.disabled = false; }
   };
 }
+/* ----- laudo consolidado (lote): gerar, baixar para o próximo engenheiro assinar e devolver assinado ----- */
+async function lotesCard(s) {
+  const box = document.getElementById('lotes'); if (!box) return;
+  let r; try { r = await api({ acao: 'lotes', token: s.token }); } catch (e) { r = { ok: false }; }
+  if (!document.getElementById('lotes')) return;
+  const ls = (r.ok && r.lotes) || [];
+  box.innerHTML = '<h2 style="margin:0 0 4px;font-size:18px">Laudo consolidado</h2><p class="row" style="margin:0">Vários documentos num único PDF: <b>uma assinatura por engenheiro</b> no gov.br. Cada um assina o mesmo arquivo, um depois do outro.</p>' +
+    ls.map((l, i) => '<div style="border-top:1px solid #e3e7ee;margin-top:12px;padding-top:10px"><b>' + esc(l.id) + '</b> · ' + esc(l.tipo) + ' · ' + l.docs + ' documentos<div class="row" style="margin:4px 0">' +
+      l.resp.map(x => '<span style="display:inline-block;margin:2px 6px 0 0;color:' + (x.assinou ? 'var(--ok)' : 'var(--amb)') + '">' + (x.assinou ? '✓ ' : '○ ') + esc(x.nome) + '</span>').join('') + '</div><div class="row" style="font-size:12px">' + esc(l.situacao) + '</div>' +
+      (/^Assinado/.test(l.situacao) ? '<button class="btn nav" data-lbx="' + i + '" style="width:100%;margin:8px 0 0;padding:10px">BAIXAR LAUDO ASSINADO</button>' :
+        '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn out" data-lbx="' + i + '" style="flex:1;margin:0;padding:10px 4px;font-size:13px">BAIXAR PARA ASSINAR</button><button class="btn sec" data-lenv="' + i + '" style="flex:1;margin:0;padding:10px 4px;font-size:13px">ENVIAR ASSINADO</button></div>') + '</div>').join('') +
+    '<div style="display:flex;gap:8px;margin-top:14px"><button class="btn nav" id="lgi" style="flex:1;margin:0;padding:10px 4px;font-size:13px">LOTE DE IMPLANTAÇÃO (TODOS)</button><button class="btn out" id="lgp" style="flex:1;margin:0;padding:10px 4px;font-size:13px">LOTE DOS PENDENTES</button></div><div class="erro" id="lerr"></div>';
+  const gera = async (b, modo) => { const t = b.textContent; b.disabled = true; b.textContent = 'MONTANDO O PDF… (até 2 min)';
+    try { const x = await api({ acao: 'loteGerar', token: s.token, modo }); if (!x.ok) { document.getElementById('lerr').textContent = x.erro || 'Não foi possível.'; b.disabled = false; b.textContent = t; return; }
+      abrePdf(x.b64, x.nome); lotesCard(s); } catch (e) { b.textContent = 'SEM SINAL'; b.disabled = false; } };
+  document.getElementById('lgi').onclick = ev => { if (confirm('Montar um único PDF com TODOS os documentos da empresa, para cada engenheiro assinar uma vez?')) gera(ev.target, 'implantacao'); };
+  document.getElementById('lgp').onclick = ev => gera(ev.target, 'pendentes');
+  box.querySelectorAll('[data-lbx]').forEach(b => b.onclick = async () => { const t = b.textContent; b.disabled = true; b.textContent = 'BAIXANDO…';
+    try { const x = await api({ acao: 'loteBaixar', token: s.token, lote: ls[+b.dataset.lbx].id }); if (x.ok) abrePdf(x.b64, x.nome); else alert(x.erro); } catch (e) {} b.disabled = false; b.textContent = t; });
+  box.querySelectorAll('[data-lenv]').forEach(b => b.onclick = () => loteEnviar(ls[+b.dataset.lenv]));
+}
+function loteEnviar(l) { TELA = 'docEnviar';
+  const s = sessao(), hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(l.tipo) + ' · ' + l.docs + ' documentos</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(l.id) + '</h2><div class="row">' + l.resp.map(x => (x.assinou ? '✓ ' : '○ ') + esc(x.nome)).join(' · ') + '</div></div>' +
+    '<div class="card"><label class="f" style="margin-top:0">PDF devolvido pelo gov.br <span class="obr">*</span></label><input type="file" accept="application/pdf" id="lpdf" class="t">' +
+    l.resp.map(x => '<label class="f">Nº da ART – ' + esc(x.nome) + (x.assinou ? ' (já assinou)' : '') + '</label><input class="t" data-art="' + esc(x.id) + '" inputmode="numeric">').join('') +
+    '<label class="f">Data de emissão</label><input type="date" class="t" id="lemi" value="' + hoje + '">' +
+    '<p class="row" style="font-size:12px">Envie o arquivo que o gov.br devolveu depois da sua assinatura. Se ainda faltar alguém, o sistema guarda e o próximo engenheiro baixa este mesmo arquivo para assinar por cima. Quando todas as assinaturas estiverem no PDF, os ' + l.docs + ' documentos ficam vigentes.</p><div class="erro" id="lerr2"></div></div>' +
+    '<button class="btn sec" id="lenv">ENVIAR</button><button class="btn out" id="lvt">VOLTAR</button>';
+  document.getElementById('lvt').onclick = () => docs();
+  document.getElementById('lenv').onclick = async () => {
+    const er = document.getElementById('lerr2'), f = document.getElementById('lpdf').files[0], arts = {};
+    app.querySelectorAll('[data-art]').forEach(i => { if (i.value.trim()) arts[i.dataset.art] = i.value.trim(); });
+    if (!f) { er.textContent = 'Escolha o PDF assinado.'; return; }
+    if (f.size > 45e6) { er.textContent = 'PDF acima de 45 MB.'; return; }
+    const bt = document.getElementById('lenv'); bt.disabled = true; bt.textContent = 'CONFERINDO AS ASSINATURAS…';
+    try {
+      const b64 = await new Promise((ok, no) => { const rd = new FileReader(); rd.onload = () => ok(String(rd.result).split(',')[1]); rd.onerror = no; rd.readAsDataURL(f); });
+      const x = await api({ acao: 'loteEnviar', token: s.token, lote: l.id, b64, arts, emissao: document.getElementById('lemi').value });
+      if (!x.ok) { er.textContent = x.erro || 'Não foi possível enviar.'; bt.disabled = false; bt.textContent = 'ENVIAR'; return; }
+      app.innerHTML = '<div class="card ok-big"><div class="m" style="background:' + (x.completo ? 'var(--ok)' : 'var(--amb)') + '">' + (x.completo ? '✓' : '½') + '</div><h2 style="margin:0 0 8px">' + (x.completo ? 'Laudo consolidado vigente' : 'Assinatura registrada') + '</h2><p class="row">' + esc(x.msg) + '</p></div><button class="btn nav" id="fv">VOLTAR AOS DOCUMENTOS</button>';
+      document.getElementById('fv').onclick = () => docs();
+    } catch (e) { er.textContent = 'Sem sinal. Tente de novo.'; bt.disabled = false; bt.textContent = 'ENVIAR'; }
+  };
+}
 function docEnviar(d) { TELA = 'docEnviar';
-  const s = sessao(), hoje = new Date().toISOString().slice(0, 10);
+  const s = sessao(), hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
   app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(d.id) + ' · ' + esc(d.respNome) + '</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(d.doc) + '</h2><div class="row">' + esc(d.escopo === 'Empresa' ? 'Empresa toda' : d.escopo) + '</div></div>' +
     '<div class="card"><label class="f" style="margin-top:0">PDF assinado digitalmente <span class="obr">*</span></label><input type="file" accept="application/pdf" id="epdf" class="t">' +
     '<label class="f">Nº da ART <span class="obr">*</span></label><input class="t" id="eart" value="' + esc(d.art || '') + '">' +
