@@ -369,6 +369,18 @@ async function etapa(tipo) { TELA = 'etapa';
   const marca = (g, j) => { const it = def.itens[+g.dataset.k]; v[it.id][+g.dataset.i] = it.colunas[j]; g.querySelectorAll('button').forEach((x, n) => x.classList.toggle('on', n === j)); };
   app.querySelectorAll('.seg[data-k]').forEach(g => g.onclick = ev => { const b = ev.target.closest('button'); if (b) marca(g, +b.dataset.j); });
   app.querySelectorAll('[data-todos]').forEach(b => b.onclick = () => app.querySelectorAll('.seg[data-k="' + b.dataset.todos + '"]').forEach(g => marca(g, 0)));
+  // resíduos: na etapa CDF, mostra os MTR em aberto para tocar em vez de digitar
+  const kMtr = def.itens.findIndex(it => it.titulo === 'Nº do MTR'), kEt = def.itens.findIndex(it => it.titulo === 'Etapa');
+  if (tipo === 'RESD' && kMtr >= 0 && (def.mtrAbertos || []).length) {
+    const inp = app.querySelector('input[data-k="' + kMtr + '"]');
+    inp.insertAdjacentHTML('afterend', '<div id="mtrab" hidden><p class="row" style="margin:8px 0 4px;font-size:13px"><b>MTR aguardando CDF</b> – toque no MTR desta coleta:</p><div class="opc">' +
+      def.mtrAbertos.map((m, i) => '<button data-m="' + i + '"><b>' + esc(m.mtr) + '</b>' + (m.coleta ? ' · coleta ' + esc(m.coleta) : '') + '<br><span style="font-size:13px;color:var(--mut)">' + esc(m.itens.join('; ')) + '</span></button>').join('') + '</div></div>');
+    const box = document.getElementById('mtrab');
+    box.onclick = ev => { const b = ev.target.closest('button[data-m]'); if (!b) return; const m = def.mtrAbertos[+b.dataset.m]; inp.value = m.mtr; v[def.itens[kMtr].id] = m.mtr; box.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
+    const ver = () => { box.hidden = !(kEt < 0 || /^CDF/.test(v[def.itens[kEt].id] || '')); };
+    if (kEt >= 0) app.querySelector('.opc[data-k="' + kEt + '"]').addEventListener('click', () => setTimeout(ver, 0));
+    ver();
+  }
   document.getElementById('ft').onchange = async ev => {
     for (const f of [...ev.target.files].slice(0, 4 - fotos.length)) fotos.push(await reduz(f));
     document.getElementById('fts').innerHTML = fotos.map(x => '<img src="' + x + '">').join('');
