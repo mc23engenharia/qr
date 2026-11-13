@@ -502,8 +502,9 @@ async function lotesCard(s) {
   const ls = (r.ok && r.lotes) || [];
   box.innerHTML = '<h2 style="margin:0 0 4px;font-size:18px">Laudo consolidado</h2><p class="row" style="margin:0">Vários documentos num único PDF: <b>uma assinatura por engenheiro</b> no gov.br. Cada um assina o mesmo arquivo, um depois do outro.</p>' +
     ls.map((l, i) => '<div style="border-top:1px solid #e3e7ee;margin-top:12px;padding-top:10px"><b>' + esc(l.id) + '</b> · ' + esc(l.tipo) + ' · ' + l.docs + ' documentos<div class="row" style="margin:4px 0">' +
-      l.resp.map(x => '<span style="display:inline-block;margin:2px 6px 0 0;color:' + (x.assinou ? 'var(--ok)' : 'var(--amb)') + '">' + (x.assinou ? '✓ ' : '○ ') + esc(x.nome) + '</span>').join('') + '</div><div class="row" style="font-size:12px">' + esc(l.situacao) + '</div>' +
+      l.resp.map(x => '<div style="color:' + (x.assinou ? 'var(--ok)' : 'var(--amb)') + '">' + (x.assinou ? '✓ ' : '○ ') + esc(x.nome) + ' <span style="color:#667;font-size:12px">· ART ' + (x.art ? esc(x.art) : 'não informada') + '</span></div>').join('') + '</div><div class="row" style="font-size:12px">' + esc(l.situacao) + '</div>' +
       (/^Assinado/.test(l.situacao) ? '<button class="btn nav" data-lbx="' + i + '" style="width:100%;margin:8px 0 0;padding:10px">BAIXAR LAUDO ASSINADO</button>' :
+        (!l.resp.some(x => x.assinou) ? '<button class="btn ' + (l.resp.every(x => x.art) ? 'out' : 'nav') + '" data-lart="' + i + '" style="width:100%;margin:8px 0 0;padding:10px;font-size:13px">' + (l.resp.every(x => x.art) ? 'ALTERAR ART' : '1º INFORMAR A ART (ANTES DE ASSINAR)') + '</button>' : '') +
         '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn out" data-lbx="' + i + '" style="flex:1;margin:0;padding:10px 4px;font-size:13px">BAIXAR PARA ASSINAR</button><button class="btn sec" data-lenv="' + i + '" style="flex:1;margin:0;padding:10px 4px;font-size:13px">ENVIAR ASSINADO</button></div>') + '</div>').join('') +
     '<div style="display:flex;gap:8px;margin-top:14px"><button class="btn nav" id="lgi" style="flex:1;margin:0;padding:10px 4px;font-size:13px">LOTE DE IMPLANTAÇÃO (TODOS)</button><button class="btn out" id="lgp" style="flex:1;margin:0;padding:10px 4px;font-size:13px">LOTE DOS PENDENTES</button></div><div class="erro" id="lerr"></div>';
   const gera = async (b, modo) => { const t = b.textContent; b.disabled = true; b.textContent = 'MONTANDO O PDF… (até 2 min)';
@@ -514,12 +515,35 @@ async function lotesCard(s) {
   box.querySelectorAll('[data-lbx]').forEach(b => b.onclick = async () => { const t = b.textContent; b.disabled = true; b.textContent = 'BAIXANDO…';
     try { const x = await api({ acao: 'loteBaixar', token: s.token, lote: ls[+b.dataset.lbx].id }); if (x.ok) abrePdf(x.b64, x.nome); else alert(x.erro); } catch (e) {} b.disabled = false; b.textContent = t; });
   box.querySelectorAll('[data-lenv]').forEach(b => b.onclick = () => loteEnviar(ls[+b.dataset.lenv]));
+  box.querySelectorAll('[data-lart]').forEach(b => b.onclick = () => loteArt(ls[+b.dataset.lart]));
+}
+/* ART antes de assinar: o PDF do lote é refeito com a ART impressa, e cada engenheiro assina uma vez só */
+function loteArt(l) { TELA = 'docEnviar';
+  const s = sessao();
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(l.tipo) + ' · ' + l.docs + ' documentos</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(l.id) + '</h2><p class="row">Registre a ART no CREA e informe o número aqui. O PDF é refeito com a ART impressa na capa, no sumário, em cada seção e no termo de assinaturas. Depois é só baixar e assinar.</p></div>' +
+    '<div class="card">' + l.resp.map(x => '<label class="f">Nº da ART – ' + esc(x.nome) + '</label><input class="t" data-art="' + esc(x.id) + '" inputmode="numeric" value="' + esc(x.art || '') + '">').join('') +
+    '<p class="row" style="font-size:12px">Se a ART de alguém ainda não saiu, deixe em branco e informe depois (antes da primeira assinatura).</p><div class="erro" id="aerr"></div></div>' +
+    '<button class="btn sec" id="aok">GERAR PDF COM A ART</button><button class="btn out" id="avt">VOLTAR</button>';
+  document.getElementById('avt').onclick = () => docs();
+  document.getElementById('aok').onclick = async () => {
+    const er = document.getElementById('aerr'), arts = {};
+    app.querySelectorAll('[data-art]').forEach(i => { if (i.value.trim()) arts[i.dataset.art] = i.value.trim(); });
+    if (!Object.keys(arts).length) { er.textContent = 'Informe ao menos uma ART.'; return; }
+    const bt = document.getElementById('aok'); bt.disabled = true; bt.textContent = 'REFAZENDO O PDF… (até 2 min)';
+    try {
+      const x = await api({ acao: 'loteArt', token: s.token, lote: l.id, arts });
+      if (!x.ok) { er.textContent = x.erro || 'Não foi possível.'; bt.disabled = false; bt.textContent = 'GERAR PDF COM A ART'; return; }
+      abrePdf(x.b64, x.nome);
+      app.innerHTML = '<div class="card ok-big"><div class="m" style="background:var(--ok)">✓</div><h2 style="margin:0 0 8px">PDF pronto para assinar</h2><p class="row">' + (x.falta.length ? 'Ainda sem ART: ' + esc(x.falta.join(', ')) + '. ' : 'Todas as ART estão no PDF. ') + 'Agora assine no gov.br e use ENVIAR ASSINADO.</p></div><button class="btn nav" id="fv">VOLTAR AOS DOCUMENTOS</button>';
+      document.getElementById('fv').onclick = () => docs();
+    } catch (e) { er.textContent = 'Sem sinal. Tente de novo.'; bt.disabled = false; bt.textContent = 'GERAR PDF COM A ART'; }
+  };
 }
 function loteEnviar(l) { TELA = 'docEnviar';
   const s = sessao(), hoje = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
   app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(l.tipo) + ' · ' + l.docs + ' documentos</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(l.id) + '</h2><div class="row">' + l.resp.map(x => (x.assinou ? '✓ ' : '○ ') + esc(x.nome)).join(' · ') + '</div></div>' +
     '<div class="card"><label class="f" style="margin-top:0">PDF devolvido pelo gov.br <span class="obr">*</span></label><input type="file" accept="application/pdf" id="lpdf" class="t">' +
-    l.resp.map(x => '<label class="f">Nº da ART – ' + esc(x.nome) + (x.assinou ? ' (já assinou)' : '') + '</label><input class="t" data-art="' + esc(x.id) + '" inputmode="numeric">').join('') +
+    l.resp.map(x => '<label class="f">Nº da ART – ' + esc(x.nome) + (x.assinou ? ' (já assinou)' : '') + '</label><input class="t" data-art="' + esc(x.id) + '" inputmode="numeric" value="' + esc(x.art || '') + '">').join('') +
     '<label class="f">Data de emissão</label><input type="date" class="t" id="lemi" value="' + hoje + '">' +
     '<p class="row" style="font-size:12px">Envie o arquivo que o gov.br devolveu depois da sua assinatura. Se ainda faltar alguém, o sistema guarda e o próximo engenheiro baixa este mesmo arquivo para assinar por cima. Quando todas as assinaturas estiverem no PDF, os ' + l.docs + ' documentos ficam vigentes.</p><div class="erro" id="lerr2"></div></div>' +
     '<button class="btn sec" id="lenv">ENVIAR</button><button class="btn out" id="lvt">VOLTAR</button>';
