@@ -481,7 +481,7 @@ async function docs() { TELA = 'docs';
   document.getElementById('dcv').onclick = () => avisos();
   const baixa = async (b, acao, d) => { const t = b.textContent; b.disabled = true; b.textContent = 'GERANDO…';
     try { const x = await api({ acao, token: s.token, id: d.id }); if (!x.ok) { b.textContent = 'ERRO'; alert(x.erro); } else { abrePdf(x.b64, x.nome); b.textContent = t; } } catch (e) { b.textContent = 'SEM SINAL'; } b.disabled = false; };
-  app.querySelectorAll('[data-min]').forEach(b => b.onclick = () => baixa(b, 'minuta', lista[+b.dataset.min]));
+  app.querySelectorAll('[data-min]').forEach(b => b.onclick = () => minutaTela(lista[+b.dataset.min]));
   app.querySelectorAll('[data-bx]').forEach(b => b.onclick = () => baixa(b, 'docBaixar', lista[+b.dataset.bx]));
   app.querySelectorAll('[data-env]').forEach(b => b.onclick = () => docEnviar(lista[+b.dataset.env]));
   if (eng) lotesCard(s);
@@ -494,6 +494,35 @@ async function docs() { TELA = 'docs';
     } catch (e) { dof.textContent = 'Sem sinal. Tente de novo.'; dof.disabled = false; }
   };
 }
+/* junta PDFs no próprio aparelho (pdf-lib): o laudo e, no fim, a(s) ART emitidas pelo CREA */
+async function pdfLib() { if (window.PDFLib) return window.PDFLib;
+  await new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js'; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+  return window.PDFLib; }
+async function juntaPdf(b64, arquivos) {
+  const L = await pdfLib(), doc = await L.PDFDocument.load(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
+  for (const f of arquivos) { const src = await L.PDFDocument.load(await f.arrayBuffer(), { ignoreEncryption: true }); (await doc.copyPages(src, src.getPageIndices())).forEach(pg => doc.addPage(pg)); }
+  const u = await doc.save(); let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+/* minuta de um documento: ART opcional (número impresso e PDF do CREA anexado no fim) */
+function minutaTela(d) { TELA = 'docEnviar';
+  const s = sessao();
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(d.id) + ' · ' + esc(d.respNome || '') + '</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(d.doc) + '</h2><div class="row">' + esc(d.escopo) + '</div></div>' +
+    '<div class="card"><label class="f" style="margin-top:0">Nº da ART (opcional)</label><input class="t" id="mart" inputmode="numeric"><label class="f">PDF da ART emitido pelo CREA (opcional)</label><input type="file" accept="application/pdf" class="t" id="mpdf">' +
+    '<p class="row" style="font-size:12px">Com a ART aqui, ela já sai impressa na minuta e o PDF do CREA vai anexo no fim: o engenheiro baixa, assina uma vez no gov.br e envia.</p><div class="erro" id="merr"></div></div>' +
+    '<button class="btn sec" id="mok">GERAR MINUTA</button><button class="btn out" id="mvt">VOLTAR</button>';
+  document.getElementById('mvt').onclick = () => docs();
+  document.getElementById('mok').onclick = async () => {
+    const er = document.getElementById('merr'), bt = document.getElementById('mok'), art = document.getElementById('mart').value.trim(), f = document.getElementById('mpdf').files[0];
+    if (art && !/\d{6,}/.test(art)) { er.textContent = 'O nº da ART tem pelo menos 6 dígitos.'; return; }
+    bt.disabled = true; bt.textContent = 'GERANDO…';
+    try { const x = await api({ acao: 'minuta', token: s.token, id: d.id, art, artAnexa: !!f });
+      if (!x.ok) { er.textContent = x.erro || 'Não foi possível.'; bt.disabled = false; bt.textContent = 'GERAR MINUTA'; return; }
+      if (f) { bt.textContent = 'ANEXANDO A ART…'; x.b64 = await juntaPdf(x.b64, [f]); x.nome = x.nome.replace(/\.pdf$/i, ' (com ART).pdf'); }
+      abrePdf(x.b64, x.nome); bt.disabled = false; bt.textContent = 'GERAR DE NOVO';
+    } catch (e) { er.textContent = 'Não foi possível (sem sinal ou PDF da ART protegido).'; bt.disabled = false; bt.textContent = 'GERAR MINUTA'; }
+  };
+}
 /* ----- laudo consolidado (lote): gerar, baixar para o próximo engenheiro assinar e devolver assinado ----- */
 async function lotesCard(s) {
   const box = document.getElementById('lotes'); if (!box) return;
@@ -504,7 +533,7 @@ async function lotesCard(s) {
     ls.map((l, i) => '<div style="border-top:1px solid #e3e7ee;margin-top:12px;padding-top:10px"><b>' + esc(l.id) + '</b> · ' + esc(l.tipo) + ' · ' + l.docs + ' documentos<div class="row" style="margin:4px 0">' +
       l.resp.map(x => '<div style="color:' + (x.assinou ? 'var(--ok)' : 'var(--amb)') + '">' + (x.assinou ? '✓ ' : '○ ') + esc(x.nome) + ' <span style="color:#667;font-size:12px">· ART ' + (x.art ? esc(x.art) : 'não informada') + '</span></div>').join('') + '</div><div class="row" style="font-size:12px">' + esc(l.situacao) + '</div>' +
       (/^Assinado/.test(l.situacao) ? '<button class="btn nav" data-lbx="' + i + '" style="width:100%;margin:8px 0 0;padding:10px">BAIXAR LAUDO ASSINADO</button>' :
-        (!l.resp.some(x => x.assinou) ? '<button class="btn ' + (l.resp.every(x => x.art) ? 'out' : 'nav') + '" data-lart="' + i + '" style="width:100%;margin:8px 0 0;padding:10px;font-size:13px">' + (l.resp.every(x => x.art) ? 'ALTERAR ART' : '1º INFORMAR A ART (ANTES DE ASSINAR)') + '</button>' : '') +
+        (!l.resp.some(x => x.assinou) ? '<button class="btn ' + (l.resp.every(x => x.art) ? 'out' : 'nav') + '" data-lart="' + i + '" style="width:100%;margin:8px 0 0;padding:10px;font-size:13px">' + (l.resp.every(x => x.art) ? 'ALTERAR ART' : '1º ANEXAR A ART (ANTES DE ASSINAR)') + '</button>' : '') +
         '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn out" data-lbx="' + i + '" style="flex:1;margin:0;padding:10px 4px;font-size:13px">BAIXAR PARA ASSINAR</button><button class="btn sec" data-lenv="' + i + '" style="flex:1;margin:0;padding:10px 4px;font-size:13px">ENVIAR ASSINADO</button></div>') + '</div>').join('') +
     '<div style="display:flex;gap:8px;margin-top:14px"><button class="btn nav" id="lgi" style="flex:1;margin:0;padding:10px 4px;font-size:13px">LOTE DE IMPLANTAÇÃO (TODOS)</button><button class="btn out" id="lgp" style="flex:1;margin:0;padding:10px 4px;font-size:13px">LOTE DOS PENDENTES</button></div><div class="erro" id="lerr"></div>';
   const gera = async (b, modo) => { const t = b.textContent; b.disabled = true; b.textContent = 'MONTANDO O PDF… (até 2 min)';
@@ -520,9 +549,9 @@ async function lotesCard(s) {
 /* ART antes de assinar: o PDF do lote é refeito com a ART impressa, e cada engenheiro assina uma vez só */
 function loteArt(l) { TELA = 'docEnviar';
   const s = sessao();
-  app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(l.tipo) + ' · ' + l.docs + ' documentos</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(l.id) + '</h2><p class="row">Registre a ART no CREA e informe o número aqui. O PDF é refeito com a ART impressa na capa, no sumário, em cada seção e no termo de assinaturas. Depois é só baixar e assinar.</p></div>' +
-    '<div class="card">' + l.resp.map(x => '<label class="f">Nº da ART – ' + esc(x.nome) + '</label><input class="t" data-art="' + esc(x.id) + '" inputmode="numeric" value="' + esc(x.art || '') + '">').join('') +
-    '<p class="row" style="font-size:12px">Se a ART de alguém ainda não saiu, deixe em branco e informe depois (antes da primeira assinatura).</p><div class="erro" id="aerr"></div></div>' +
+  app.innerHTML = '<div class="card"><p class="row" style="margin:0">' + esc(l.tipo) + ' · ' + l.docs + ' documentos</p><h2 style="margin:6px 0 4px;font-size:20px">' + esc(l.id) + '</h2><p class="row">Informe o nº e escolha o PDF da ART que o CREA emitiu. O laudo é refeito com o nº impresso na capa, no sumário, em cada seção e no termo de assinaturas, e o PDF da ART entra anexo no fim. Depois é só baixar e assinar uma vez.</p></div>' +
+    '<div class="card">' + l.resp.map(x => '<label class="f">' + esc(x.nome) + ' – nº da ART</label><input class="t" data-art="' + esc(x.id) + '" inputmode="numeric" value="' + esc(x.art || '') + '"><label class="f" style="font-weight:normal">PDF da ART emitido pelo CREA (opcional)</label><input type="file" accept="application/pdf" class="t" data-artpdf="' + esc(x.id) + '">').join('') +
+    '<p class="row" style="font-size:12px">O PDF da ART entra como anexo no fim do laudo, antes de assinar. Se a ART de alguém ainda não saiu, deixe em branco e informe depois (antes da primeira assinatura).</p><div class="erro" id="aerr"></div></div>' +
     '<button class="btn sec" id="aok">GERAR PDF COM A ART</button><button class="btn out" id="avt">VOLTAR</button>';
   document.getElementById('avt').onclick = () => docs();
   document.getElementById('aok').onclick = async () => {
@@ -531,8 +560,11 @@ function loteArt(l) { TELA = 'docEnviar';
     if (!Object.keys(arts).length) { er.textContent = 'Informe ao menos uma ART.'; return; }
     const bt = document.getElementById('aok'); bt.disabled = true; bt.textContent = 'REFAZENDO O PDF… (até 2 min)';
     try {
-      const x = await api({ acao: 'loteArt', token: s.token, lote: l.id, arts });
+      const pdfs = [...app.querySelectorAll('[data-artpdf]')].map(i => i.files[0]).filter(Boolean);
+      const x = await api({ acao: 'loteArt', token: s.token, lote: l.id, arts, anexa: pdfs.length > 0 });
       if (!x.ok) { er.textContent = x.erro || 'Não foi possível.'; bt.disabled = false; bt.textContent = 'GERAR PDF COM A ART'; return; }
+      if (pdfs.length) { bt.textContent = 'ANEXANDO A ART…'; x.b64 = await juntaPdf(x.b64, pdfs); x.nome = l.id + ' - PARA ASSINAR (com ART anexa).pdf';
+        const y = await api({ acao: 'loteAnexo', token: s.token, lote: l.id, b64: x.b64 }); if (!y.ok) { er.textContent = y.erro || 'Não foi possível guardar.'; bt.disabled = false; bt.textContent = 'GERAR PDF COM A ART'; return; } }
       abrePdf(x.b64, x.nome);
       app.innerHTML = '<div class="card ok-big"><div class="m" style="background:var(--ok)">✓</div><h2 style="margin:0 0 8px">PDF pronto para assinar</h2><p class="row">' + (x.falta.length ? 'Ainda sem ART: ' + esc(x.falta.join(', ')) + '. ' : 'Todas as ART estão no PDF. ') + 'Agora assine no gov.br e use ENVIAR ASSINADO.</p></div><button class="btn nav" id="fv">VOLTAR AOS DOCUMENTOS</button>';
       document.getElementById('fv').onclick = () => docs();
